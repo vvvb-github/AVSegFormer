@@ -1,0 +1,7 @@
+.vscode
+**/__pycache__/**
+*.pth
+temp
+data
+pretrained
+work_dir
