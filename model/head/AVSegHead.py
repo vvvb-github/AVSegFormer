@@ -232,7 +232,7 @@ class AVSegHead(nn.Module):
                 mask_feature, size=cur_fpn.shape[-2:], mode='bilinear', align_corners=False)
         mask_feature = self.out_conv(mask_feature)
         if hasattr(self, 'fusion_block'):
-            feat14 = self.fusion_block(feat14, audio_feat)
+            mask_feature = self.fusion_block(mask_feature, audio_feat)
 
         # prepare auxiliary masks for attention loss
         attn_masks = []
