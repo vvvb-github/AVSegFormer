@@ -48,6 +48,15 @@ Please refer to the link [AVSBenchmark](https://github.com/OpenNLPLab/AVSBench) 
 - The pretrained backbone is available from benchmark [AVSBench pretrained backbones](https://drive.google.com/drive/folders/1386rcFHJ1QEQQMF6bV1rXJTzy8v26RTV).
 - We provides pre-trained models for all three subtasks. You can download them from [AVSegFormer pretrained models](https://drive.google.com/drive/folders/1ZYZOWAfoXcGPDsocswEN7ZYvcAn4H8kY).
 
+|Backbone|Subset|Lr schd|Config|mIoU|F-score|Download|
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+|Res50|S4|30ep|[config](config/s4/AVSegFormer_res50_s4.py)|76.45|85.9|[ckpt](https://drive.google.com/file/d/11CvMJyMcLeNogrGiBRsC6MBAubfRf9Es/view?usp=share_link)|
+|PvtV2|S4|30ep|[config](config/s4/AVSegFormer_pvt2_s4.py)|82.06|89.9|[ckpt](https://drive.google.com/file/d/1Gf61ZKmhoUMnc4QSmD9fpK4BFAh9Xbqq/view?usp=share_link)|
+|Res50|MS3|60ep|[config](config/ms3/AVSegFormer_res50_ms3.py)|49.53|62.8|[ckpt](https://drive.google.com/file/d/1t8PAQkjCHgVKWkl9fstc7hAbZi7zGzqD/view?usp=share_link)|
+|PvtV2|MS3|60ep|[config](config/ms3/AVSegFormer_pvt2_ms3.py)|58.36|69.3|[ckpt](https://drive.google.com/file/d/1Zp3USytNFdrBgeKJitq1_8qcGzhRx7NG/view?usp=share_link)|
+|Res50|AVSS|30ep|[config](config/avss/AVSegFormer_res50_avss.py)|29.77|35.2|[ckpt](https://drive.google.com/file/d/1GNWoKsNqLFWlTMDwqkWc7xO6YCTwWR7U/view?usp=share_link)|
+|PvtV2|AVSS|30ep|[config](config/avss/AVSegFormer_pvt2_avss.py)|36.66|42.0|[ckpt](https://drive.google.com/file/d/1M31vgu6rM7gGecRngvF2tAiZ6HwHM5_p/view?usp=share_link)|
+
 
 ## Train
 ```shell
