@@ -8,7 +8,7 @@ The combination of vision and audio has long been a topic of interest among rese
 
 
 ## 🏠 Method
-<img width="1009" alt="image" src="https://github.com/vvvb-github/AVSegFormer/assets/23737120/5a241c8d-2ff3-4577-aa18-fff14202449d">
+<img width="1009" alt="image" src="https://github.com/vvvb-github/AVSegFormer/image/arch.png">
 
 
 ## 🛠️ Get Started
