@@ -41,10 +41,12 @@ class S4Dataset(Dataset):
         print("{}/{} videos are used for {}".format(len(self.df_split),
               len(df_all), self.split))
         self.img_transform = transforms.Compose([
+            transforms.Resize([512, 512]),
             transforms.ToTensor(),
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
         ])
         self.mask_transform = transforms.Compose([
+            transforms.Resize([512, 512]),
             transforms.ToTensor(),
         ])
 

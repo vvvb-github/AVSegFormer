@@ -55,7 +55,7 @@ def F1_Dice_loss(pred_masks, first_gt_mask):
     return loss.mean()
 
 
-def IouSemanticAwareLoss(pred_masks, attn_masks, gt_mask, weight_dict, loss_type='bce', **kwargs):
+def IouSemanticAwareLoss(pred_masks, mask_feature, gt_mask, weight_dict, loss_type='bce', **kwargs):
     total_loss = 0
     loss_dict = {}
 
@@ -70,9 +70,11 @@ def IouSemanticAwareLoss(pred_masks, attn_masks, gt_mask, weight_dict, loss_type
     total_loss += weight_dict['iou_loss'] * iou_loss
     loss_dict['iou_loss'] = weight_dict['iou_loss'] * iou_loss.item()
 
-    for i, mask in enumerate(attn_masks):
-        loss_i = weight_dict['mask_loss'] * loss_func(mask, gt_mask)
-        total_loss += loss_i
-        loss_dict[f'mask_loss{i}'] = loss_i.item()
+    mask_feature = torch.mean(mask_feature, dim=1, keepdim=True)
+    mask_feature = F.interpolate(
+        mask_feature, gt_mask.shape[-2:], mode='bilinear', align_corners=False)
+    mix_loss = weight_dict['mix_loss']*loss_func(mask_feature, gt_mask)
+    total_loss += mix_loss
+    loss_dict['mix_loss'] = mix_loss.item()
 
     return total_loss, loss_dict

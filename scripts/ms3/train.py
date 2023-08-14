@@ -89,9 +89,9 @@ def main():
             audio = audio.view(-1, audio.shape[2],
                                audio.shape[3], audio.shape[4])
 
-            output, attn_masks = model(audio, imgs)
+            output, mask_feature = model(audio, imgs)
             loss, loss_dict = IouSemanticAwareLoss(
-                output, attn_masks, mask, **cfg.loss)
+                output, mask_feature, mask, **cfg.loss)
             loss_util.add_loss(loss, loss_dict)
             optimizer.zero_grad()
             loss.backward()

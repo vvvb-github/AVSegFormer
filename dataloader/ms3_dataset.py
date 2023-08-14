@@ -34,16 +34,18 @@ class MS3Dataset(Dataset):
         super(MS3Dataset, self).__init__()
         self.split = split
         self.mask_num = 5
-        self.cfg=cfg
+        self.cfg = cfg
         df_all = pd.read_csv(cfg.anno_csv, sep=',')
         self.df_split = df_all[df_all['split'] == split]
         print("{}/{} videos are used for {}".format(len(self.df_split),
               len(df_all), self.split))
         self.img_transform = transforms.Compose([
+            transforms.Resize([512, 512]),
             transforms.ToTensor(),
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
         ])
         self.mask_transform = transforms.Compose([
+            transforms.Resize([512, 512]),
             transforms.ToTensor(),
         ])
 

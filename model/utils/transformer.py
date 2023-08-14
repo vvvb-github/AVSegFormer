@@ -114,13 +114,13 @@ class AVSTransformerDecoderLayer(nn.Module):
         query = query + self.dropout1(out1)
         query = self.norm1(query)
         # cross attention
-        out2, mask_embeds = self.cross_attn(
-            query, src, src, key_padding_mask=padding_mask)
+        out2 = self.cross_attn(
+            query, src, src, key_padding_mask=padding_mask)[0]
         query = query + self.dropout2(out2)
         query = self.norm2(query)
         # ffn
         query = self.ffn(query)
-        return query, mask_embeds
+        return query
 
 
 class AVSTransformerDecoder(nn.Module):
@@ -134,14 +134,12 @@ class AVSTransformerDecoder(nn.Module):
 
     def forward(self, query, src, reference_points, spatial_shapes, level_start_index, padding_mask=None):
         out = query
-        mask_embeds = []
         outputs = []
         for layer in self.layers:
-            out, mask_embed = layer(out, src, reference_points,
-                                    spatial_shapes, level_start_index, padding_mask)
-            mask_embeds.append(mask_embed)
+            out = layer(out, src, reference_points, spatial_shapes,
+                        level_start_index, padding_mask)
             outputs.append(out)
-        return outputs, mask_embeds
+        return outputs
 
 
 class AVSTransformer(nn.Module):
@@ -159,9 +157,9 @@ class AVSTransformer(nn.Module):
     def forward(self, query, src, spatial_shapes, level_start_index, valid_ratios, pos=None, padding_mask=None):
         memory, reference_points = self.encoder(
             src, spatial_shapes, level_start_index, valid_ratios, pos, padding_mask)
-        outputs, mask_embeds = self.decoder(query, memory, reference_points,
-                                            spatial_shapes, level_start_index, padding_mask)
-        return memory, outputs, mask_embeds
+        outputs = self.decoder(query, memory, reference_points,
+                               spatial_shapes, level_start_index, padding_mask)
+        return memory, outputs
 
 
 def build_transformer(type, **kwargs):

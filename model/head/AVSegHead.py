@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from model.utils import build_transformer, build_positional_encoding, build_fusion_block
+from model.utils import build_transformer, build_positional_encoding, build_fusion_block, build_generator
 from ops.modules import MSDeformAttn
 from torch.nn.init import normal_
 from torch.nn.functional import interpolate
@@ -74,6 +74,7 @@ class AVSegHead(nn.Module):
                  num_classes,
                  query_num,
                  transformer,
+                 query_generator,
                  embed_dim=256,
                  valid_indices=[1, 2, 3],
                  scale_factor=4,
@@ -93,6 +94,8 @@ class AVSegHead(nn.Module):
         self.level_embed = nn.Parameter(
             torch.Tensor(self.num_feats, embed_dim))
         self.learnable_query = nn.Embedding(query_num, embed_dim)
+
+        self.query_generator = build_generator(**query_generator)
 
         self.transformer = build_transformer(**transformer)
         if positional_encoding is not None:
@@ -212,13 +215,13 @@ class AVSegHead(nn.Module):
 
         # prepare queries
         bs = audio_feat.shape[0]
-        query = audio_feat.repeat(1, self.query_num, 1)
+        query = self.query_generator(audio_feat)
         if self.use_learnable_queries:
             query = query + \
                 self.learnable_query.weight[None, :, :].repeat(bs, 1, 1)
 
-        memory, outputs, mask_embeds = self.transformer(query, src_flatten, spatial_shapes,
-                                                        level_start_index, valid_ratios, lvl_pos_embed_flatten, mask_flatten)
+        memory, outputs = self.transformer(query, src_flatten, spatial_shapes,
+                                           level_start_index, valid_ratios, lvl_pos_embed_flatten, mask_flatten)
 
         # generate mask feature
         mask_feats = []
@@ -234,13 +237,6 @@ class AVSegHead(nn.Module):
         if hasattr(self, 'fusion_block'):
             mask_feature = self.fusion_block(mask_feature, audio_feat)
 
-        # prepare auxiliary masks for attention loss
-        attn_masks = []
-        for output, mask_embed in zip(outputs, mask_embeds):
-            attn_mask = self.forward_prediction_head(
-                output, mask_embed, spatial_shapes, level_start_index)
-            attn_masks.append(attn_mask)
-
         # predict output mask
         pred_feature = torch.einsum(
             'bqc,bchw->bqhw', outputs[-1], mask_feature)
@@ -248,20 +244,20 @@ class AVSegHead(nn.Module):
         pred_mask = mask_feature + pred_feature
         pred_mask = self.fc(pred_mask)
 
-        return pred_mask, attn_masks
+        return pred_mask, mask_feature
 
-    def forward_prediction_head(self, output, mask_embed, spatial_shapes, level_start_index):
-        masks = torch.einsum('bqc,bqn->bcn', output, mask_embed)
-        splitted_masks = self.reform_output_squences(
-            masks, spatial_shapes, level_start_index, 2)
+    # def forward_prediction_head(self, output, mask_embed, spatial_shapes, level_start_index):
+    #     masks = torch.einsum('bqc,bqn->bcn', output, mask_embed)
+    #     splitted_masks = self.reform_output_squences(
+    #         masks, spatial_shapes, level_start_index, 2)
 
-        bs = output.shape[0]
-        reforms = []
-        for i, embed in enumerate(splitted_masks):
-            embed = embed.view(
-                bs, -1, spatial_shapes[i][0], spatial_shapes[i][1])
-            reforms.append(embed)
+    #     bs = output.shape[0]
+    #     reforms = []
+    #     for i, embed in enumerate(splitted_masks):
+    #         embed = embed.view(
+    #             bs, -1, spatial_shapes[i][0], spatial_shapes[i][1])
+    #         reforms.append(embed)
 
-        attn_mask = self.fpn(reforms)
-        attn_mask = self.attn_fc(attn_mask)
-        return attn_mask
+    #     attn_mask = self.fpn(reforms)
+    #     attn_mask = self.attn_fc(attn_mask)
+    #     return attn_mask
