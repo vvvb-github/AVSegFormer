@@ -8,7 +8,7 @@ The combination of vision and audio has long been a topic of interest among rese
 
 
 ## 🏠 Method
-<img width="1009" alt="image" src="https://github.com/vvvb-github/AVSegFormer/image/arch.png">
+<img width="1009" alt="image" src="image/arch.png">
 
 
 ## 🛠️ Get Started
@@ -46,12 +46,12 @@ Please refer to the link [AVSBenchmark](https://github.com/OpenNLPLab/AVSBench) 
 
 |Method|Backbone|Subset|Lr schd|Config|mIoU|F-score|Download|
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-|AVSegFormer-R50|ResNet-50|S4|30ep|[config](config/s4/AVSegFormer_res50_s4.py)|76.45|85.9|[ckpt](https://drive.google.com/file/d/11CvMJyMcLeNogrGiBRsC6MBAubfRf9Es/view?usp=share_link)|
-|AVSegFormer-PVTv2|PVTv2-B5|S4|30ep|[config](config/s4/AVSegFormer_pvt2_s4.py)|82.06|89.9|[ckpt](https://drive.google.com/file/d/1Gf61ZKmhoUMnc4QSmD9fpK4BFAh9Xbqq/view?usp=share_link)|
-|AVSegFormer-R50|ResNet-50|MS3|60ep|[config](config/ms3/AVSegFormer_res50_ms3.py)|49.53|62.8|[ckpt](https://drive.google.com/file/d/1t8PAQkjCHgVKWkl9fstc7hAbZi7zGzqD/view?usp=share_link)|
-|AVSegFormer-PVTv2|PVTv2-B5|MS3|60ep|[config](config/ms3/AVSegFormer_pvt2_ms3.py)|58.36|69.3|[ckpt](https://drive.google.com/file/d/1Zp3USytNFdrBgeKJitq1_8qcGzhRx7NG/view?usp=share_link)|
-|AVSegFormer-R50|ResNet-50|AVSS|30ep|[config](config/avss/AVSegFormer_res50_avss.py)|29.77|35.2|[ckpt](https://drive.google.com/file/d/1GNWoKsNqLFWlTMDwqkWc7xO6YCTwWR7U/view?usp=share_link)|
-|AVSegFormer-PVTv2|PVTv2-B5|AVSS|30ep|[config](config/avss/AVSegFormer_pvt2_avss.py)|36.66|42.0|[ckpt](https://drive.google.com/file/d/1M31vgu6rM7gGecRngvF2tAiZ6HwHM5_p/view?usp=share_link)|
+|AVSegFormer-R50|ResNet-50|S4|30ep|[config](config/s4/AVSegFormer_res50_s4.py)|76.38|86.7|[ckpt](https://drive.google.com/file/d/1nvIfR-1XZ_BgP8ZSUDuAsGhAwDJRxgC3/view?usp=drive_link)|
+|AVSegFormer-PVTv2|PVTv2-B5|S4|30ep|[config](config/s4/AVSegFormer_pvt2_s4.py)|83.06|90.5|[ckpt](https://drive.google.com/file/d/1ZJ55jxoHP1ur-hLBkGcha8sjptE_shfw/view?usp=drive_link)|
+|AVSegFormer-R50|ResNet-50|MS3|60ep|[config](config/ms3/AVSegFormer_res50_ms3.py)|53.81|65.6|[ckpt](https://drive.google.com/file/d/1MRk5gQnUtiWwYDpPfB20fO07SVLhfuIV/view?usp=drive_link)|
+|AVSegFormer-PVTv2|PVTv2-B5|MS3|60ep|[config](config/ms3/AVSegFormer_pvt2_ms3.py)|61.33|73.0|[ckpt](https://drive.google.com/file/d/1iKTxWtehAgCkNVty-4H1zVyAOaNxipHv/view?usp=drive_link)|
+|AVSegFormer-R50|ResNet-50|AVSS|30ep|[config](config/avss/AVSegFormer_res50_avss.py)|26.58|31.5|[ckpt](https://drive.google.com/file/d/1RvL6psDsINuUwd9V1ESgE2Kixh9MXIke/view?usp=drive_link)|
+|AVSegFormer-PVTv2|PVTv2-B5|AVSS|30ep|[config](config/avss/AVSegFormer_pvt2_avss.py)|37.31|42.8|[ckpt](https://drive.google.com/file/d/1P8a2dJSUoW0EqFyxyP8B1-Rnscxnh0YY/view?usp=drive_link)|
 
 
 ### 4. Train
