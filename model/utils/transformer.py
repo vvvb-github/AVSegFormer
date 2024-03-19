@@ -162,8 +162,101 @@ class AVSTransformer(nn.Module):
         return memory, outputs
 
 
+class TAVSTransformerEncoderLayer(nn.Module):
+    def __init__(self, T, L, dim=256, ffn_dim=2048, dropout=0.1, num_heads=8):
+        super().__init__()
+        self.L = L
+        self.T = T
+
+        # temporal attention
+        self.temporal_attn = nn.MultiheadAttention(
+            dim*L, 1, dropout=dropout, batch_first=True)
+        self.norm_t = nn.LayerNorm(dim*L)
+
+        # self attention
+        self.self_attn = nn.MultiheadAttention(
+            dim, num_heads, dropout=dropout, batch_first=True)
+        self.dropout1 = nn.Dropout(dropout)
+        self.norm1 = nn.LayerNorm(dim)
+
+        # ffn
+        self.linear1 = nn.Linear(dim, ffn_dim)
+        self.activation = nn.GELU()
+        self.dropout2 = nn.Dropout(dropout)
+        self.linear2 = nn.Linear(ffn_dim, dim)
+        self.dropout3 = nn.Dropout(dropout)
+        self.norm2 = nn.LayerNorm(dim)
+
+    @staticmethod
+    def with_pos_embed(tensor, pos):
+        return tensor if pos is None else tensor + pos
+
+    def ffn(self, src):
+        src2 = self.linear2(self.dropout2(self.activation(self.linear1(src))))
+        src = src + self.dropout3(src2)
+        src = self.norm2(src)
+        return src
+
+    def forward(self, src, pos, frame_mask, padding_mask=None):
+        query = self.with_pos_embed(src, pos)
+        B, N, C = query.shape
+        # temporal attention
+        query_t = query.reshape(B//self.T, self.T, N*C)
+        out_t = self.temporal_attn(
+            query, query, query, key_padding_mask=frame_mask)[0]
+        query_t = query_t+out_t
+        query = query_t.reshape(B, N, C)
+        # self attention
+        out = self.self_attn(query, query, query,
+                             key_padding_mask=padding_mask)[0]
+        query = query + self.dropout1(out)
+        query = self.norm1(query)
+        # ffn
+        query = self.ffn(query)
+        return query
+
+
+class TAVSTransformerEncoder(nn.Module):
+    def __init__(self, num_layers, layer, *args, **kwargs) -> None:
+        super().__init__()
+
+        self.num_layers = num_layers
+        self.layers = nn.ModuleList(
+            [TAVSTransformerEncoderLayer(**layer) for i in range(num_layers)]
+        )
+
+    def forward(self, frame_mask, src, pos=None, padding_mask=None):
+        out = src
+        for layer in self.layers:
+            out = layer(out, pos, frame_mask, padding_mask)
+        return out
+
+
+class TAVSTransformer(nn.Module):
+    def __init__(self, encoder, decoder, *args, **kwargs) -> None:
+        super().__init__()
+
+        self.encoder = TAVSTransformerEncoder(**encoder)
+        self.decoder = AVSTransformerDecoder(**decoder)
+
+    def _reset_parameters(self):
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+
+    def forward_enc(self, frame_mask, src, pos=None, padding_mask=None):
+        out = self.encoder(frame_mask, src, pos, padding_mask)
+        return out
+
+    def forward_dec(self, query, src):
+        outputs = self.decoder(query, src, None, None, None, None)
+        return outputs
+
+
 def build_transformer(type, **kwargs):
     if type == 'AVSTransformer':
         return AVSTransformer(**kwargs)
+    elif type == 'TAVSTransformer':
+        return TAVSTransformer(**kwargs)
     else:
         raise ValueError
