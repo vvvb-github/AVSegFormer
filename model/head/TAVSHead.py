@@ -174,7 +174,7 @@ class TAVSHead(nn.Module):
         return y
 
     def forward(self, vid_frame_mask, feats, audio_feat):
-        B, T = vid_frame_mask.shape
+        B, T = 2, 5
         feat14 = self.in_proj[0](feats[0])
         # prepare input for encoder
         srcs = [self.in_proj[i](feats[i]) for i in self.valid_indices]
@@ -205,7 +205,7 @@ class TAVSHead(nn.Module):
         # encoder
         src_enc = torch.cat([src_flatten, audio_feat], 1)
         pos_enc = torch.cat(
-            [lvl_pos_embed_flatten, self.audio_pos_encoding.view(1, 1, -1)], 1)
+            [lvl_pos_embed_flatten, self.audio_pos_encoding.view(1, 1, -1).repeat(B*T, 1, 1)], 1)
         memory = self.transformer.forward_enc(
             vid_frame_mask, src_enc, pos_enc, None)
         memory_v, memory_a = memory[:, :-1, :], memory[:, -1:, :]
@@ -214,14 +214,14 @@ class TAVSHead(nn.Module):
         query = self.query_generator(memory_a)
         if self.use_learnable_queries:
             query = query + \
-                self.learnable_query.weight[None, :, :].repeat(B, 1, 1)
+                self.learnable_query.weight[None, :, :].repeat(B*T, 1, 1)
         outputs = self.transformer.forward_dec(query, memory_v)
 
         # generate mask feature
         mask_feats = []
         for i, z in enumerate(self.reform_output_squences(memory_v, spatial_shapes, level_start_index, 1)):
             mask_feats.append(z.transpose(1, 2).view(
-                B, -1, spatial_shapes[i][0], spatial_shapes[i][1]))
+                B*T, -1, spatial_shapes[i][0], spatial_shapes[i][1]))
         cur_fpn = self.lateral_conv(feat14)
         mask_feature = mask_feats[0]
         mask_feature = cur_fpn + \

@@ -62,6 +62,7 @@ class TAVSegFormer(nn.Module):
         return feats
 
     def forward(self, audio, frames, vid_temporal_mask_flag=None):
+        vid_frame_mask = None
         if vid_temporal_mask_flag is not None:
             vid_frame_mask = vid_temporal_mask_flag.unsqueeze(0)
             vid_temporal_mask_flag = vid_temporal_mask_flag.view(-1, 1, 1, 1)
@@ -73,8 +74,9 @@ class TAVSegFormer(nn.Module):
         img_feat = self.extract_feat(frames)
         img_feat = self.mul_temporal_mask(img_feat, vid_temporal_mask_flag)
 
-        pred, mask_feature = self.head(vid_frame_mask.repeat(
-            audio_feat.shape[0], 1), img_feat, audio_feat)
+        if vid_frame_mask is not None:
+            vid_frame_mask = vid_frame_mask.repeat(audio_feat.shape[0], 1)
+        pred, mask_feature = self.head(vid_frame_mask, img_feat, audio_feat)
         pred = self.mul_temporal_mask(pred, vid_temporal_mask_flag)
         mask_feature = self.mul_temporal_mask(
             mask_feature, vid_temporal_mask_flag)

@@ -169,9 +169,9 @@ class TAVSTransformerEncoderLayer(nn.Module):
         self.T = T
 
         # temporal attention
-        self.temporal_attn = nn.MultiheadAttention(
-            dim*L, 1, dropout=dropout, batch_first=True)
-        self.norm_t = nn.LayerNorm(dim*L)
+        #self.temporal_attn = nn.MultiheadAttention(
+        #    dim*L, 1, dropout=dropout, batch_first=True)
+        #self.norm_t = nn.LayerNorm(dim*L)
 
         # self attention
         self.self_attn = nn.MultiheadAttention(
@@ -199,13 +199,13 @@ class TAVSTransformerEncoderLayer(nn.Module):
 
     def forward(self, src, pos, frame_mask, padding_mask=None):
         query = self.with_pos_embed(src, pos)
-        B, N, C = query.shape
+        #B, N, C = query.shape
         # temporal attention
-        query_t = query.reshape(B//self.T, self.T, N*C)
-        out_t = self.temporal_attn(
-            query, query, query, key_padding_mask=frame_mask)[0]
-        query_t = query_t+out_t
-        query = query_t.reshape(B, N, C)
+        #query_t = query.reshape(B//self.T, self.T, N*C)
+        #out_t = self.temporal_attn(
+        #    query, query, query, key_padding_mask=frame_mask)[0]
+        #query_t = query_t+out_t
+        #query = query_t.reshape(B, N, C)
         # self attention
         out = self.self_attn(query, query, query,
                              key_padding_mask=padding_mask)[0]
