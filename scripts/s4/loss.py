@@ -48,9 +48,9 @@ def F1_Dice_loss(pred_masks, first_gt_mask):
     pred_mask = first_pred.flatten(1)
     gt_mask = first_gt_mask.flatten(1)
     a = (pred_mask * gt_mask).sum(-1)
-    b = (pred_mask * pred_mask).sum(-1) + 0.001
-    c = (gt_mask * gt_mask).sum(-1) + 0.001
-    d = (2 * a) / (b + c)
+    b = pred_mask.sum(-1)
+    c = gt_mask.sum(-1)
+    d = (2 * a) / (b + c + 0.001)
     loss = 1 - d
     return loss.mean()
 

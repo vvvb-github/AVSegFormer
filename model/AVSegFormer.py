@@ -33,10 +33,6 @@ class AVSegFormer(nn.Module):
         self.freeze_backbone(True)
 
         self.neck = neck
-        # if neck is not None:
-        #     self.neck = build_neck(**neck)
-        # else:
-        #     self.neck = None
 
     def freeze_backbone(self, freeze=False):
         for p in self.backbone.parameters():
@@ -61,7 +57,7 @@ class AVSegFormer(nn.Module):
             feats = self.neck(feats)
         return feats
 
-    def forward(self, audio, frames, vid_temporal_mask_flag=None):
+    def forward(self, audio, frames, targets=None, vid_temporal_mask_flag=None, train=False):
         if vid_temporal_mask_flag is not None:
             vid_temporal_mask_flag = vid_temporal_mask_flag.view(-1, 1, 1, 1)
         with torch.no_grad():
@@ -72,9 +68,12 @@ class AVSegFormer(nn.Module):
         img_feat = self.extract_feat(frames)
         img_feat = self.mul_temporal_mask(img_feat, vid_temporal_mask_flag)
 
-        pred, mask_feature = self.head(img_feat, audio_feat)
-        pred = self.mul_temporal_mask(pred, vid_temporal_mask_flag)
+        pred_mask, pred_logit, mask_feature = self.head(
+            img_feat, audio_feat, targets, train=train)
+        pred_mask = self.mul_temporal_mask(pred_mask, vid_temporal_mask_flag)
+        pred_logit = self.mul_temporal_mask(
+            pred_logit, vid_temporal_mask_flag.squeeze(-1))
         mask_feature = self.mul_temporal_mask(
             mask_feature, vid_temporal_mask_flag)
 
-        return pred, mask_feature
+        return pred_mask, pred_logit, mask_feature

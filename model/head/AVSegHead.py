@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from model.utils import build_transformer, build_positional_encoding, build_fusion_block, build_generator
+from model.utils import build_transformer, build_positional_encoding, build_fusion_block, build_generator, build_matcher
 from ops.modules import MSDeformAttn
 from torch.nn.init import normal_
 from torch.nn.functional import interpolate
@@ -75,6 +75,7 @@ class AVSegHead(nn.Module):
                  query_num,
                  transformer,
                  query_generator,
+                 matcher,
                  embed_dim=256,
                  valid_indices=[1, 2, 3],
                  scale_factor=4,
@@ -96,6 +97,7 @@ class AVSegHead(nn.Module):
         self.learnable_query = nn.Embedding(query_num, embed_dim)
 
         self.query_generator = build_generator(**query_generator)
+        self.matcher = build_matcher(**matcher)
 
         self.transformer = build_transformer(**transformer)
         if positional_encoding is not None:
@@ -113,7 +115,6 @@ class AVSegHead(nn.Module):
                 )
             )
         self.in_proj = nn.ModuleList(in_proj)
-        self.mlp = MLP(query_num, 2048, embed_dim, 3)
 
         if fusion_block is not None:
             self.fusion_block = build_fusion_block(**fusion_block)
@@ -131,21 +132,9 @@ class AVSegHead(nn.Module):
         )
 
         self.fpn = SimpleFPN()
-        self.attn_fc = nn.Sequential(
-            nn.Conv2d(embed_dim, 128, kernel_size=3, stride=1, padding=1),
-            Interpolate(scale_factor=scale_factor, mode="bilinear"),
-            nn.Conv2d(128, 32, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(True),
-            nn.Conv2d(32, num_classes, kernel_size=1,
-                      stride=1, padding=0, bias=False)
-        )
-        self.fc = nn.Sequential(
-            nn.Conv2d(embed_dim, 128, kernel_size=3, stride=1, padding=1),
-            Interpolate(scale_factor=scale_factor, mode="bilinear"),
-            nn.Conv2d(128, 32, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(True),
-            nn.Conv2d(32, num_classes, kernel_size=1,
-                      stride=1, padding=0, bias=False)
+        self.logits_predictor = nn.Sequential(
+            nn.Linear(embed_dim, 128),
+            nn.Linear(128, 1)
         )
 
         self._reset_parameters()
@@ -180,7 +169,20 @@ class AVSegHead(nn.Module):
         y = torch.split(memory, split_size_or_sections, dim=dim)
         return y
 
-    def forward(self, feats, audio_feat):
+    def forward(self, feats, audio_feat, targets, train):
+        """
+        Args:
+            feats (list(tensor)): [(bs, c, h, w)]=[4]
+            audio_feat (tensor): tensor: (bs, 1, c)
+            targets (dict): [
+                {
+                    'gt_masks': (num_gts, h, w),
+                    'gt_classes': (num_gts, num_classes)
+                    'vid_mask_flag': bool
+                } 
+            ]=[bs]
+            train (bool)
+        """
         feat14 = self.in_proj[0](feats[0])
         srcs = [self.in_proj[i](feats[i]) for i in self.valid_indices]
         masks = [torch.zeros((x.size(0), x.size(2), x.size(
@@ -238,26 +240,54 @@ class AVSegHead(nn.Module):
             mask_feature = self.fusion_block(mask_feature, audio_feat)
 
         # predict output mask
-        pred_feature = torch.einsum(
+        pred_masks = torch.einsum(
             'bqc,bchw->bqhw', outputs[-1], mask_feature)
-        pred_feature = self.mlp(pred_feature)
-        pred_mask = mask_feature + pred_feature
-        pred_mask = self.fc(pred_mask)
+        pred_logits = self.logits_predictor(outputs[-1])
+        pred_mask = []
+        pred_logit = []
 
-        return pred_mask, mask_feature
+        if train:
+            # matcher
+            indices = self.matcher(pred_masks, pred_logits, targets)
+            idx = 0
+            for b, tgt in enumerate(targets):
+                if tgt['vid_mask_flag']:
+                    pm, pl = self.pad_pred_masks(
+                        pred_masks[b], pred_logits[b], indices[idx], tgt)
+                    idx += 1
+                    pred_mask.append(pm)
+                    pred_logit.append(pl)
+                else:
+                    pred_mask.append(torch.zeros([1, self.num_classes, pred_masks.shape[-2],
+                                     pred_masks.shape[-1]], dtype=pred_masks.dtype, device=pred_masks.device))
+                    pred_logit.append(torch.zeros(
+                        [1, self.num_classes, self.num_classes], dtype=pred_logits.dtype, device=pred_logits.device))
+        else:
+            for m, l in zip(pred_masks, pred_logits):
+                pm, pl = self.generate_outputs(m, l)
+                pred_mask.append(pm)
+                pred_logit.append(pl)
 
-    # def forward_prediction_head(self, output, mask_embed, spatial_shapes, level_start_index):
-    #     masks = torch.einsum('bqc,bqn->bcn', output, mask_embed)
-    #     splitted_masks = self.reform_output_squences(
-    #         masks, spatial_shapes, level_start_index, 2)
+        pred_mask = torch.cat(pred_mask, dim=0)
+        pred_logit = torch.cat(pred_logit, dim=0)
+        return pred_mask, pred_logit, mask_feature  # (bs, n_cls, h, w), (bs, n_cls, n_cls), (bs, c, h, w)
 
-    #     bs = output.shape[0]
-    #     reforms = []
-    #     for i, embed in enumerate(splitted_masks):
-    #         embed = embed.view(
-    #             bs, -1, spatial_shapes[i][0], spatial_shapes[i][1])
-    #         reforms.append(embed)
+    def pad_pred_masks(self, pred_mask, pred_logit, indice, target):
+        matched_masks = pred_mask[indice[0], :, :]  # (n_cls, h, w)
+        matched_logits = pred_logit[indice[0], :]  # (n_cls, n_cls)
+        gt_logits = target['gt_classes'][indice[1], :]  # (n_cls, n_cls)
+        matched_cls = torch.argmax(gt_logits, dim=1)
+        pad_mask = torch.zeros_like(pred_mask[0]).unsqueeze(
+            0).repeat(self.num_classes, 1, 1)
+        pad_logit = torch.zeros_like(pred_logit[0]).unsqueeze(
+            0).repeat(self.num_classes, 1)
+        for m, l, cls in zip(matched_masks, matched_logits, matched_cls):
+            pad_mask[cls] = m
+            pad_logit[cls] = l
+        return pad_mask.unsqueeze(0), pad_logit.unsqueeze(0)
 
-    #     attn_mask = self.fpn(reforms)
-    #     attn_mask = self.attn_fc(attn_mask)
-    #     return attn_mask
+    def generate_outputs(self, pred_mask, pred_logit):
+        indices = torch.argmax(pred_logit, dim=0)  # (,n_cls)
+        vid_logit = pred_logit[indices, :]
+        vid_mask = pred_mask[indices, :, :]
+        return vid_mask.unsqueeze(0), vid_logit.unsqueeze(0)
