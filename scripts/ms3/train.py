@@ -121,7 +121,7 @@ def main():
                                    audio.shape[3], audio.shape[4])
 
                 # [bs*5, 1, 224, 224]
-                output, _ = model(audio, imgs)
+                output, _, _ = model(audio, imgs)
 
                 miou = mask_iou(output.squeeze(1), mask)
                 avg_meter_miou.add({'miou': miou})

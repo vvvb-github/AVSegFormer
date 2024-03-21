@@ -270,7 +270,10 @@ class AVSegHead(nn.Module):
 
         pred_mask = torch.cat(pred_mask, dim=0)
         pred_logit = torch.cat(pred_logit, dim=0)
-        return pred_mask, pred_logit, mask_feature  # (bs, n_cls, h, w), (bs, n_cls, n_cls), (bs, c, h, w)
+        pred_mask = F.interpolate(
+            pred_mask, scale_factor=self.scale_factor, mode='bilinear', align_corners=False)
+        # (bs, n_cls, h, w), (bs, n_cls, n_cls), (bs, c, h, w)
+        return pred_mask, pred_logit, mask_feature
 
     def pad_pred_masks(self, pred_mask, pred_logit, indice, target):
         matched_masks = pred_mask[indice[0], :, :]  # (n_cls, h, w)

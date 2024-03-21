@@ -51,7 +51,7 @@ def main():
             audio = audio.view(-1, audio.shape[2],
                                audio.shape[3], audio.shape[4])
 
-            output, _ = model(audio, imgs)
+            output, _, _ = model(audio, imgs)
             if args.save_pred_mask:
                 mask_save_path = os.path.join(
                     args.save_dir, dir_name, 'pred_masks')
