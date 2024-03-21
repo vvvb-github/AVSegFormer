@@ -70,10 +70,13 @@ class AVSegFormer(nn.Module):
 
         pred_mask, pred_logit, mask_feature = self.head(
             img_feat, audio_feat, targets, train=train)
-        pred_mask = self.mul_temporal_mask(pred_mask, vid_temporal_mask_flag)
-        pred_logit = self.mul_temporal_mask(
-            pred_logit, vid_temporal_mask_flag.squeeze(-1))
-        mask_feature = self.mul_temporal_mask(
-            mask_feature, vid_temporal_mask_flag)
+
+        if vid_temporal_mask_flag is not None:
+            pred_mask = self.mul_temporal_mask(
+                pred_mask, vid_temporal_mask_flag)
+            pred_logit = self.mul_temporal_mask(
+                pred_logit, vid_temporal_mask_flag.squeeze(-1))
+            mask_feature = self.mul_temporal_mask(
+                mask_feature, vid_temporal_mask_flag)
 
         return pred_mask, pred_logit, mask_feature

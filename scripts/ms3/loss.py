@@ -19,6 +19,8 @@ def dice_loss(pred_mask, five_gt_masks):
     """
     assert len(pred_mask.shape) == 4
     pred_mask = torch.sigmoid(pred_mask)
+    pred_mask = F.interpolate(
+        pred_mask, five_gt_masks.shape[-2:], mode='bilinear', align_corners=False)
 
     pred_mask = pred_mask.flatten(1)
     gt_mask = five_gt_masks.flatten(1)
@@ -32,8 +34,6 @@ def dice_loss(pred_mask, five_gt_masks):
 
 def mix_loss(mask_feature, gt_mask):
     mask_feature = torch.mean(mask_feature, dim=1, keepdim=True)
-    mask_feature = F.interpolate(
-        mask_feature, gt_mask.shape[-2:], mode='bilinear', align_corners=False)
     return dice_loss(mask_feature, gt_mask)
 
 
