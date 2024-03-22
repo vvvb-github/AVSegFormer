@@ -68,7 +68,7 @@ class AVSegFormer(nn.Module):
         img_feat = self.extract_feat(frames)
         img_feat = self.mul_temporal_mask(img_feat, vid_temporal_mask_flag)
 
-        pred_mask, pred_logit, mask_feature = self.head(
+        pred_mask, pred_logit, mask_feature, aux_outputs = self.head(
             img_feat, audio_feat, targets, train=train)
 
         if vid_temporal_mask_flag is not None:
@@ -78,5 +78,11 @@ class AVSegFormer(nn.Module):
                 pred_logit, vid_temporal_mask_flag.squeeze(-1))
             mask_feature = self.mul_temporal_mask(
                 mask_feature, vid_temporal_mask_flag)
+            if aux_outputs is not None:
+                for i, (m, l) in enumerate(aux_outputs):
+                    aux_outputs[i][0] = self.mul_temporal_mask(
+                        m, vid_temporal_mask_flag)
+                    aux_outputs[i][1] = self.mul_temporal_mask(
+                        l, vid_temporal_mask_flag.squeeze(-1))
 
         return pred_mask, pred_logit, mask_feature

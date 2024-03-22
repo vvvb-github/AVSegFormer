@@ -37,7 +37,7 @@ def mix_loss(mask_feature, gt_mask):
     return dice_loss(mask_feature, gt_mask)
 
 
-def AVSLoss(pred_mask, pred_logit, mask_feature, gt_mask, loss_type, weight_dict, **kwargs):
+def AVSLoss(pred_mask, pred_logit, mask_feature, aux_outputs, gt_mask, loss_type, weight_dict, **kwargs):
     total_loss = 0
     print_loss_dict = {}
 
@@ -54,5 +54,17 @@ def AVSLoss(pred_mask, pred_logit, mask_feature, gt_mask, loss_type, weight_dict
             loss = w*mix_loss(mask_feature, gt_mask)
             total_loss += loss
             print_loss_dict['mix_loss'] = loss.item()
+
+    if aux_outputs is not None:
+        for i, (mask, logit) in enumerate(aux_outputs):
+            for l, w in zip(loss_type, weight_dict):
+                if l == 'dice':
+                    loss = w*dice_loss(mask, gt_mask)
+                    total_loss += loss
+                    print_loss_dict[f'dice_loss{i}'] = loss.item()
+                elif l == 'l1':
+                    loss = w*l1_loss(logit)
+                    total_loss += loss
+                    print_loss_dict[f'f1_loss{i}'] = loss.item()
 
     return total_loss, print_loss_dict

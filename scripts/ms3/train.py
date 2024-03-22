@@ -89,10 +89,11 @@ def main():
             audio = audio.view(-1, audio.shape[2],
                                audio.shape[3], audio.shape[4])
 
-            targets=prepare_targets(mask)
-            pred_mask, pred_logit, mask_feature = model(audio, imgs, targets, train=True)
+            targets = prepare_targets(mask)
+            pred_mask, pred_logit, mask_feature, aux_outputs = model(
+                audio, imgs, targets, train=True)
             loss, loss_dict = AVSLoss(
-                pred_mask, pred_logit, mask_feature, mask, **cfg.loss)
+                pred_mask, pred_logit, mask_feature, aux_outputs, mask, **cfg.loss)
             loss_util.add_loss(loss, loss_dict)
             optimizer.zero_grad()
             loss.backward()
@@ -121,7 +122,7 @@ def main():
                                    audio.shape[3], audio.shape[4])
 
                 # [bs*5, 1, 224, 224]
-                output, _, _ = model(audio, imgs)
+                output = model(audio, imgs)[0]
 
                 miou = mask_iou(output.squeeze(1), mask)
                 avg_meter_miou.add({'miou': miou})
