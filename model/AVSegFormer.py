@@ -85,4 +85,4 @@ class AVSegFormer(nn.Module):
                     aux_outputs[i][1] = self.mul_temporal_mask(
                         l, vid_temporal_mask_flag.squeeze(-1))
 
-        return pred_mask, pred_logit, mask_feature
+        return pred_mask, pred_logit, mask_feature, aux_outputs

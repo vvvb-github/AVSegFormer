@@ -265,6 +265,10 @@ class AVSegHead(nn.Module):
                                      pred_masks.shape[-1]], dtype=pred_masks.dtype, device=pred_masks.device))
                     pred_logit.append(torch.zeros(
                         [1, self.num_classes, self.num_classes], dtype=pred_logits.dtype, device=pred_logits.device))
+
+            if self.aux_output:
+                aux_outputs = self.generate_aux_outputs(
+                    outputs, mask_feature, targets)
         else:
             for m, l in zip(pred_masks, pred_logits):
                 pm, pl = self.generate_infer_outputs(m, l)
@@ -275,9 +279,6 @@ class AVSegHead(nn.Module):
         pred_logit = torch.cat(pred_logit, dim=0)
         pred_mask = F.interpolate(
             pred_mask, scale_factor=self.scale_factor, mode='bilinear', align_corners=False)
-        if self.aux_output:
-            aux_outputs = self.generate_aux_outputs(
-                outputs, mask_feature, targets)
         # (bs, n_cls, h, w), (bs, n_cls, n_cls), (bs, c, h, w)
         return pred_mask, pred_logit, mask_feature, aux_outputs
 
