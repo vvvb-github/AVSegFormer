@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from model.utils import build_transformer, build_positional_encoding, build_fusion_block, build_generator
+from model.utils import build_transformer, build_positional_encoding, build_fusion_block, build_generator, build_matcher
 from ops.modules import MSDeformAttn
 from torch.nn.init import normal_
 from torch.nn.functional import interpolate
@@ -68,21 +68,25 @@ class SimpleFPN(nn.Module):
         return y
 
 
-class TAVSHead(nn.Module):
+class AVSegHeadStar(nn.Module):
     def __init__(self,
+                 T,
                  in_channels,
                  num_classes,
                  query_num,
                  transformer,
-                 query_generator,
+                 matcher,
+                 aux_output=False,
                  embed_dim=256,
-                 valid_indices=[3],
+                 valid_indices=[1, 2, 3],
                  scale_factor=4,
                  positional_encoding=None,
                  use_learnable_queries=True,
                  fusion_block=None) -> None:
         super().__init__()
 
+        self.T = T
+        self.aux_output = aux_output
         self.in_channels = in_channels
         self.embed_dim = embed_dim
         self.num_classes = num_classes
@@ -94,17 +98,14 @@ class TAVSHead(nn.Module):
         self.level_embed = nn.Parameter(
             torch.Tensor(self.num_feats, embed_dim))
         self.learnable_query = nn.Embedding(query_num, embed_dim)
-
-        self.query_generator = build_generator(**query_generator)
+        self.matcher = build_matcher(**matcher)
 
         self.transformer = build_transformer(**transformer)
         if positional_encoding is not None:
             self.positional_encoding = build_positional_encoding(
                 **positional_encoding)
-            self.audio_pos_encoding = nn.Parameter(torch.Tensor(1, embed_dim))
         else:
             self.positional_encoding = None
-            self.audio_pos_encoding = None
 
         in_proj = []
         for c in in_channels:
@@ -115,7 +116,6 @@ class TAVSHead(nn.Module):
                 )
             )
         self.in_proj = nn.ModuleList(in_proj)
-        self.mlp = MLP(query_num, 2048, embed_dim, 3)
 
         if fusion_block is not None:
             self.fusion_block = build_fusion_block(**fusion_block)
@@ -133,21 +133,9 @@ class TAVSHead(nn.Module):
         )
 
         self.fpn = SimpleFPN()
-        self.attn_fc = nn.Sequential(
-            nn.Conv2d(embed_dim, 128, kernel_size=3, stride=1, padding=1),
-            Interpolate(scale_factor=scale_factor, mode="bilinear"),
-            nn.Conv2d(128, 32, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(True),
-            nn.Conv2d(32, num_classes, kernel_size=1,
-                      stride=1, padding=0, bias=False)
-        )
-        self.fc = nn.Sequential(
-            nn.Conv2d(embed_dim, 128, kernel_size=3, stride=1, padding=1),
-            Interpolate(scale_factor=scale_factor, mode="bilinear"),
-            nn.Conv2d(128, 32, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(True),
-            nn.Conv2d(32, num_classes, kernel_size=1,
-                      stride=1, padding=0, bias=False)
+        self.logits_predictor = nn.Sequential(
+            nn.Linear(embed_dim, 128),
+            nn.Linear(128, 1)
         )
 
         self._reset_parameters()
@@ -161,6 +149,15 @@ class TAVSHead(nn.Module):
                 m._reset_parameters()
         normal_(self.level_embed)
 
+    def get_valid_ratio(self, mask):
+        _, H, W = mask.shape
+        valid_H = torch.sum(~mask[:, :, 0], 1)
+        valid_W = torch.sum(~mask[:, 0, :], 1)
+        valid_ratio_h = valid_H.float() / H
+        valid_ratio_w = valid_W.float() / W
+        valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h], -1)
+        return valid_ratio
+
     def reform_output_squences(self, memory, spatial_shapes, level_start_index, dim=1):
         split_size_or_sections = [None] * self.num_feats
         for i in range(self.num_feats):
@@ -173,55 +170,75 @@ class TAVSHead(nn.Module):
         y = torch.split(memory, split_size_or_sections, dim=dim)
         return y
 
-    def forward(self, vid_frame_mask, feats, audio_feat):
-        B, T = 2, 5
+    def forward(self, feats, audio_feat, targets, train):
+        """
+        Args:
+            feats (list(tensor)): [(bs, c, h, w)]=[4]
+            audio_feat (tensor): tensor: (bs, 1, c)
+            targets (dict): [
+                {
+                    'gt_masks': (num_gts, h, w),
+                    'gt_classes': (num_gts, num_classes)
+                    'vid_mask_flag': bool
+                } 
+            ]=[bs]
+            train (bool)
+        """
+        bs = audio_feat.shape[0]
         feat14 = self.in_proj[0](feats[0])
-        # prepare input for encoder
         srcs = [self.in_proj[i](feats[i]) for i in self.valid_indices]
         masks = [torch.zeros((x.size(0), x.size(2), x.size(
             3)), device=x.device, dtype=torch.bool) for x in srcs]
         pos_embeds = []
         for m in masks:
             pos_embeds.append(self.positional_encoding(m))
+        # prepare input for encoder
         src_flatten = []
+        mask_flatten = []
         lvl_pos_embed_flatten = []
         spatial_shapes = []
-        for lvl, (src, pos_embed) in enumerate(zip(srcs, pos_embeds)):
+        for lvl, (src, mask, pos_embed) in enumerate(zip(srcs, masks, pos_embeds)):
             bs, c, h, w = src.shape
             spatial_shape = (h, w)
             spatial_shapes.append(spatial_shape)
             src = src.flatten(2).transpose(1, 2)
+            mask = mask.flatten(1)
             pos_embed = pos_embed.flatten(2).transpose(1, 2)
             lvl_pos_embed = pos_embed + self.level_embed[lvl].view(1, 1, -1)
             lvl_pos_embed_flatten.append(lvl_pos_embed)
             src_flatten.append(src)
+            mask_flatten.append(mask)
         src_flatten = torch.cat(src_flatten, 1)
+        mask_flatten = torch.cat(mask_flatten, 1)
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
         spatial_shapes = torch.as_tensor(
             spatial_shapes, dtype=torch.long, device=src_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros(
             (1, )), spatial_shapes.prod(1).cumsum(0)[:-1]))
+        valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
 
         # encoder
-        src_enc = torch.cat([src_flatten, audio_feat], 1)
-        pos_enc = torch.cat(
-            [lvl_pos_embed_flatten, self.audio_pos_encoding.view(1, 1, -1).repeat(B*T, 1, 1)], 1)
-        memory = self.transformer.forward_enc(
-            vid_frame_mask, src_enc, pos_enc, None)
-        memory_v, memory_a = memory[:, :-1, :], memory[:, -1:, :]
+        query = audio_feat.repeat(1, self.T, 1).reshape(
+            bs//self.T, self.T, self.T, -1)
+        query = query.permute(0, 2, 1, 3).reshape(bs, self.T, -1)
 
+        query, memory, reference_points = self.transformer.forward_enc(query, src_flatten, spatial_shapes,
+                                                                       level_start_index, valid_ratios, lvl_pos_embed_flatten, mask_flatten)
         # decoder
-        query = self.query_generator(memory_a)
+        query = query.reshape(bs//self.T, self.T, self.T, -
+                              1).permute(0, 2, 1, 3).reshape(bs, self.T, -1).mean(1)
+        query = query.repeat(1, self.query_num, 1)
         if self.use_learnable_queries:
             query = query + \
-                self.learnable_query.weight[None, :, :].repeat(B*T, 1, 1)
-        outputs = self.transformer.forward_dec(query, memory_v)
+                self.learnable_query.weight[None, :, :].repeat(bs, 1, 1)
+        outputs = self.transformer.forward_dec(
+            query, memory, reference_points, spatial_shapes, level_start_index, mask_flatten)
 
         # generate mask feature
         mask_feats = []
-        for i, z in enumerate(self.reform_output_squences(memory_v, spatial_shapes, level_start_index, 1)):
+        for i, z in enumerate(self.reform_output_squences(memory, spatial_shapes, level_start_index, 1)):
             mask_feats.append(z.transpose(1, 2).view(
-                B*T, -1, spatial_shapes[i][0], spatial_shapes[i][1]))
+                bs, -1, spatial_shapes[i][0], spatial_shapes[i][1]))
         cur_fpn = self.lateral_conv(feat14)
         mask_feature = mask_feats[0]
         mask_feature = cur_fpn + \
@@ -232,10 +249,94 @@ class TAVSHead(nn.Module):
             mask_feature = self.fusion_block(mask_feature, audio_feat)
 
         # predict output mask
-        pred_feature = torch.einsum(
+        pred_masks = torch.einsum(
             'bqc,bchw->bqhw', outputs[-1], mask_feature)
-        pred_feature = self.mlp(pred_feature)
-        pred_mask = mask_feature + pred_feature
-        pred_mask = self.fc(pred_mask)
+        pred_logits = self.logits_predictor(outputs[-1])
+        pred_mask = []
+        pred_logit = []
+        aux_outputs = None
 
-        return pred_mask, mask_feature
+        if train:
+            # matcher
+            indices = self.matcher(pred_masks, pred_logits, targets)
+            idx = 0
+            for b, tgt in enumerate(targets):
+                if tgt['vid_mask_flag']:
+                    pm, pl = self.pad_pred_masks(
+                        pred_masks[b], pred_logits[b], indices[idx], tgt)
+                    idx += 1
+                    pred_mask.append(pm)
+                    pred_logit.append(pl)
+                else:
+                    pred_mask.append(torch.zeros([1, self.num_classes, pred_masks.shape[-2],
+                                     pred_masks.shape[-1]], dtype=pred_masks.dtype, device=pred_masks.device))
+                    pred_logit.append(torch.zeros(
+                        [1, self.num_classes, self.num_classes], dtype=pred_logits.dtype, device=pred_logits.device))
+
+            if self.aux_output:
+                aux_outputs = self.generate_aux_outputs(
+                    outputs, mask_feature, targets)
+        else:
+            for m, l in zip(pred_masks, pred_logits):
+                pm, pl = self.generate_infer_outputs(m, l)
+                pred_mask.append(pm)
+                pred_logit.append(pl)
+
+        pred_mask = torch.cat(pred_mask, dim=0)
+        pred_logit = torch.cat(pred_logit, dim=0)
+        pred_mask = F.interpolate(
+            pred_mask, scale_factor=self.scale_factor, mode='bilinear', align_corners=False)
+        # (bs, n_cls, h, w), (bs, n_cls, n_cls), (bs, c, h, w)
+        return pred_mask, pred_logit, mask_feature, aux_outputs
+
+    def generate_aux_outputs(self, queries, mask_feature, targets):
+        outputs = []
+        for q in queries[:-1]:
+            pred_masks = torch.einsum(
+                'bqc,bchw->bqhw', q, mask_feature)
+            pred_logits = self.logits_predictor(q)
+            pred_mask = []
+            pred_logit = []
+
+            indices = self.matcher(pred_masks, pred_logits, targets)
+            idx = 0
+            for b, tgt in enumerate(targets):
+                if tgt['vid_mask_flag']:
+                    pm, pl = self.pad_pred_masks(
+                        pred_masks[b], pred_logits[b], indices[idx], tgt)
+                    idx += 1
+                    pred_mask.append(pm)
+                    pred_logit.append(pl)
+                else:
+                    pred_mask.append(torch.zeros([1, self.num_classes, pred_masks.shape[-2],
+                                                  pred_masks.shape[-1]], dtype=pred_masks.dtype, device=pred_masks.device))
+                    pred_logit.append(torch.zeros(
+                        [1, self.num_classes, self.num_classes], dtype=pred_logits.dtype, device=pred_logits.device))
+
+            pred_mask = torch.cat(pred_mask, dim=0)
+            pred_logit = torch.cat(pred_logit, dim=0)
+            pred_mask = F.interpolate(
+                pred_mask, scale_factor=self.scale_factor, mode='bilinear', align_corners=False)
+            outputs.append((pred_mask, pred_logit))
+
+        return outputs
+
+    def pad_pred_masks(self, pred_mask, pred_logit, indice, target):
+        matched_masks = pred_mask[indice[0], :, :]  # (n_cls, h, w)
+        matched_logits = pred_logit[indice[0], :]  # (n_cls, n_cls)
+        gt_logits = target['gt_classes'][indice[1], :]  # (n_cls, n_cls)
+        matched_cls = torch.argmax(gt_logits, dim=1)
+        pad_mask = torch.zeros_like(pred_mask[0]).unsqueeze(
+            0).repeat(self.num_classes, 1, 1)
+        pad_logit = torch.zeros_like(pred_logit[0]).unsqueeze(
+            0).repeat(self.num_classes, 1)
+        for m, l, cls in zip(matched_masks, matched_logits, matched_cls):
+            pad_mask[cls] = m
+            pad_logit[cls] = l
+        return pad_mask.unsqueeze(0), pad_logit.unsqueeze(0)
+
+    def generate_infer_outputs(self, pred_mask, pred_logit):
+        indices = torch.argmax(pred_logit, dim=0)  # (,n_cls)
+        vid_logit = pred_logit[indices, :]
+        vid_mask = pred_mask[indices, :, :]
+        return vid_mask.unsqueeze(0), vid_logit.unsqueeze(0)

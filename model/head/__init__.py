@@ -1,12 +1,12 @@
 from .AVSegHead import AVSegHead
-from .TAVSHead import TAVSHead
+from .AVSegHeadStar import AVSegHeadStar
 
 
 def build_head(type, **kwargs):
     if type == 'AVSegHead':
         return AVSegHead(**kwargs)
-    elif type=='TAVSHead':
-        return TAVSHead(**kwargs)
+    elif type=='AVSegHeadStar':
+        return AVSegHeadStar(**kwargs)
     else:
         raise ValueError
 
