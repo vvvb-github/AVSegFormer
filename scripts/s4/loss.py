@@ -3,47 +3,33 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def F1_IoU_BCELoss(pred_masks, first_gt_mask):
-    """
-    binary cross entropy loss (iou loss) of the first frame for single sound source segmentation
+def l1_loss(pred_logit):
+    l1 = nn.L1Loss()
+    pred_logit = pred_logit.sigmoid()
 
-    Args:
-    pred_masks: predicted masks for a batch of data, shape:[bs*5, 1, 224, 224]
-    first_gt_mask: ground truth mask of the first frame, shape: [bs, 1, 1, 224, 224]
-    """
-    assert len(pred_masks.shape) == 4
-    pred_masks = torch.sigmoid(pred_masks)  # [bs*5, 1, 224, 224]
-
-    indices = torch.tensor(list(range(0, len(pred_masks), 5)))
+    indices = torch.tensor(list(range(0, len(pred_logit), 5)))
     indices = indices.cuda()
     first_pred = torch.index_select(
-        pred_masks, dim=0, index=indices)  # [bs, 1, 224, 224]
-    assert first_pred.requires_grad == True, "Error when indexing predited masks"
-    if len(first_gt_mask.shape) == 5:
-        first_gt_mask = first_gt_mask.squeeze(1)  # [bs, 1, 224, 224]
+        pred_logit, dim=0, index=indices)  # [bs//5, 1, 1]
 
-    first_bce_loss = nn.BCELoss()(first_pred, first_gt_mask)
-
-    return first_bce_loss
+    loss = l1(first_pred, torch.ones_like(first_pred))
+    return loss
 
 
-def F1_Dice_loss(pred_masks, first_gt_mask):
+def dice_loss(pred_mask, first_gt_mask):
     """dice loss for aux loss
 
     Args:
-        pred_mask (Tensor): (bs*5, 1, h, w)
-        five_gt_masks (Tensor): (bs, 1, 1, h, w)
+        pred_mask (Tensor): (bs, 1, h, w)
+        first_gt_mask (Tensor): (bs//5, h, w)
     """
-    assert len(pred_masks.shape) == 4
-    pred_masks = torch.sigmoid(pred_masks)
+    assert len(pred_mask.shape) == 4
+    pred_mask = torch.sigmoid(pred_mask)
 
-    indices = torch.tensor(list(range(0, len(pred_masks), 5)))
+    indices = torch.tensor(list(range(0, len(pred_mask), 5)))
     indices = indices.cuda()
     first_pred = torch.index_select(
-        pred_masks, dim=0, index=indices)  # [bs, 1, 224, 224]
-    assert first_pred.requires_grad == True, "Error when indexing predited masks"
-    if len(first_gt_mask.shape) == 5:
-        first_gt_mask = first_gt_mask.squeeze(1)  # [bs, 1, 224, 224]
+        pred_mask, dim=0, index=indices)  # [bs//5, 1, 224, 224]
 
     pred_mask = first_pred.flatten(1)
     gt_mask = first_gt_mask.flatten(1)
@@ -55,26 +41,41 @@ def F1_Dice_loss(pred_masks, first_gt_mask):
     return loss.mean()
 
 
-def IouSemanticAwareLoss(pred_masks, mask_feature, gt_mask, weight_dict, loss_type='bce', **kwargs):
-    total_loss = 0
-    loss_dict = {}
-
-    if loss_type == 'bce':
-        loss_func = F1_IoU_BCELoss
-    elif loss_type == 'dice':
-        loss_func = F1_Dice_loss
-    else:
-        raise ValueError
-
-    iou_loss = loss_func(pred_masks, gt_mask)
-    total_loss += weight_dict['iou_loss'] * iou_loss
-    loss_dict['iou_loss'] = weight_dict['iou_loss'] * iou_loss.item()
-
+def mix_loss(mask_feature, gt_mask):
     mask_feature = torch.mean(mask_feature, dim=1, keepdim=True)
     mask_feature = F.interpolate(
         mask_feature, gt_mask.shape[-2:], mode='bilinear', align_corners=False)
-    mix_loss = weight_dict['mix_loss']*loss_func(mask_feature, gt_mask)
-    total_loss += mix_loss
-    loss_dict['mix_loss'] = mix_loss.item()
+    return dice_loss(mask_feature, gt_mask)
 
-    return total_loss, loss_dict
+
+def AVSLoss(pred_mask, pred_logit, mask_feature, aux_outputs, gt_mask, loss_type, weight_dict, **kwargs):
+    total_loss = 0
+    print_loss_dict = {}
+
+    for l, w in zip(loss_type, weight_dict):
+        if l == 'dice':
+            loss = w*dice_loss(pred_mask, gt_mask)
+            total_loss += loss
+            print_loss_dict['dice_loss'] = loss.item()
+        elif l == 'l1':
+            loss = w*l1_loss(pred_logit)
+            total_loss += loss
+            print_loss_dict['l1_loss'] = loss.item()
+        elif l == 'mix':
+            loss = w*mix_loss(mask_feature, gt_mask)
+            total_loss += loss
+            print_loss_dict['mix_loss'] = loss.item()
+
+    if aux_outputs is not None:
+        for i, (mask, logit) in enumerate(aux_outputs):
+            for l, w in zip(loss_type, weight_dict):
+                if l == 'dice':
+                    loss = w*dice_loss(mask, gt_mask)
+                    total_loss += loss
+                    print_loss_dict[f'dice_loss{i}'] = loss.item()
+                elif l == 'l1':
+                    loss = w*l1_loss(logit)
+                    total_loss += loss
+                    print_loss_dict[f'l1_loss{i}'] = loss.item()
+
+    return total_loss, print_loss_dict

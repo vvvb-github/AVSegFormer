@@ -8,11 +8,11 @@ from mmcv import Config
 import argparse
 from utils import pyutils
 from utils.loss_util import LossUtil
-from utility import mask_iou
+from utility import mask_iou, prepare_targets
 from utils.logger import getLogger
 from model import build_model
 from dataloader import build_dataset
-from loss import IouSemanticAwareLoss
+from loss import AVSLoss
 
 
 def main():
@@ -89,9 +89,11 @@ def main():
             audio = audio.view(-1, audio.shape[2],
                                audio.shape[3], audio.shape[4])
 
-            output, mask_feature = model(audio, imgs)  # [bs*5, 1, 224, 224]
-            loss, loss_dict = IouSemanticAwareLoss(
-                output, mask_feature, mask.unsqueeze(1).unsqueeze(1), **cfg.loss)
+            targets = prepare_targets(mask)
+            pred_mask, pred_logit, mask_feature, aux_outputs = model(
+                audio, imgs, targets, train=True)
+            loss, loss_dict = AVSLoss(
+                pred_mask, pred_logit, mask_feature, aux_outputs, mask, **cfg.loss)
             loss_util.add_loss(loss, loss_dict)
             optimizer.zero_grad()
             loss.backward()
@@ -120,7 +122,7 @@ def main():
                 audio = audio.view(-1, audio.shape[2],
                                    audio.shape[3], audio.shape[4])
 
-                output, _ = model(audio, imgs)
+                output = model(audio, imgs)[0]
 
                 miou = mask_iou(output.squeeze(1), mask)
                 avg_meter_miou.add({'miou': miou})

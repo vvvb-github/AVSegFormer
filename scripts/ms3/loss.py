@@ -49,7 +49,7 @@ def AVSLoss(pred_mask, pred_logit, mask_feature, aux_outputs, gt_mask, loss_type
         elif l == 'l1':
             loss = w*l1_loss(pred_logit)
             total_loss += loss
-            print_loss_dict['f1_loss'] = loss.item()
+            print_loss_dict['l1_loss'] = loss.item()
         elif l == 'mix':
             loss = w*mix_loss(mask_feature, gt_mask)
             total_loss += loss
@@ -65,6 +65,6 @@ def AVSLoss(pred_mask, pred_logit, mask_feature, aux_outputs, gt_mask, loss_type
                 elif l == 'l1':
                     loss = w*l1_loss(logit)
                     total_loss += loss
-                    print_loss_dict[f'f1_loss{i}'] = loss.item()
+                    print_loss_dict[f'l1_loss{i}'] = loss.item()
 
     return total_loss, print_loss_dict

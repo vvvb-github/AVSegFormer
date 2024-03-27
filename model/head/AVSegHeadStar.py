@@ -40,32 +40,32 @@ class MLP(nn.Module):
 
 
 class SimpleFPN(nn.Module):
-    def __init__(self, channel=256, layers=3):
+    def __init__(self, channel=256, num_layer=3):
         super().__init__()
-
-        assert layers == 3  # only designed for 3 layers
-        self.up1 = nn.Sequential(
-            Interpolate(scale_factor=2, mode='bilinear'),
-            nn.Conv2d(channel, channel, kernel_size=3, stride=1, padding=1)
+        self.num_layer = num_layer
+        self.layers = nn.ModuleList(
+            [nn.Sequential(
+                Interpolate(scale_factor=2, mode='bilinear'),
+                nn.Conv2d(channel, channel, kernel_size=3, stride=1, padding=1)
+            ) for i in range(num_layer-1)]
         )
-        self.up2 = nn.Sequential(
-            Interpolate(scale_factor=2, mode='bilinear'),
-            nn.Conv2d(channel, channel, kernel_size=3, stride=1, padding=1)
-        )
-        self.up3 = nn.Sequential(
-            Interpolate(scale_factor=2, mode='bilinear'),
-            nn.Conv2d(channel, channel, kernel_size=3, stride=1, padding=1)
+        self.out_layer = nn.Sequential(
+            nn.Conv2d(channel, channel, kernel_size=3, stride=1, padding=1),
+            nn.GroupNorm(32, channel),
+            nn.ReLU(True)
         )
 
     def forward(self, x):
-        x1 = self.up1(x[-1])
-        x1 = x1 + x[-2]
+        assert len(x) == self.num_layer
 
-        x2 = self.up2(x1)
-        x2 = x2 + x[-3]
+        rx = list(reversed(x))
+        cur = rx[0]
+        for i in range(self.num_layer-1):
+            cur = self.layers[i](cur)
+            cur = cur + rx[i+1]
+        cur = self.out_layer(cur)
 
-        y = self.up3(x2)
-        return y
+        return cur
 
 
 class AVSegHeadStar(nn.Module):
@@ -78,7 +78,7 @@ class AVSegHeadStar(nn.Module):
                  matcher,
                  aux_output=False,
                  embed_dim=256,
-                 valid_indices=[1, 2, 3],
+                 valid_indices=[0, 1, 2, 3],
                  scale_factor=4,
                  positional_encoding=None,
                  use_learnable_queries=True,
@@ -120,19 +120,19 @@ class AVSegHeadStar(nn.Module):
         if fusion_block is not None:
             self.fusion_block = build_fusion_block(**fusion_block)
 
-        self.lateral_conv = nn.Sequential(
-            nn.Conv2d(embed_dim, embed_dim,
-                      kernel_size=1, stride=1, padding=0),
-            nn.GroupNorm(32, embed_dim)
-        )
-        self.out_conv = nn.Sequential(
-            nn.Conv2d(embed_dim, embed_dim,
-                      kernel_size=3, stride=1, padding=1),
-            nn.GroupNorm(32, embed_dim),
-            nn.ReLU(True)
-        )
+        # self.lateral_conv = nn.Sequential(
+        #     nn.Conv2d(embed_dim, embed_dim,
+        #               kernel_size=1, stride=1, padding=0),
+        #     nn.GroupNorm(32, embed_dim)
+        # )
+        # self.out_conv = nn.Sequential(
+        #     nn.Conv2d(embed_dim, embed_dim,
+        #               kernel_size=3, stride=1, padding=1),
+        #     nn.GroupNorm(32, embed_dim),
+        #     nn.ReLU(True)
+        # )
 
-        self.fpn = SimpleFPN()
+        self.fpn = SimpleFPN(num_layer=len(valid_indices))
         self.logits_predictor = nn.Sequential(
             nn.Linear(embed_dim, 128),
             nn.Linear(128, 1)
@@ -185,7 +185,7 @@ class AVSegHeadStar(nn.Module):
             train (bool)
         """
         bs = audio_feat.shape[0]
-        feat14 = self.in_proj[0](feats[0])
+        # feat14 = self.in_proj[0](feats[0])
         srcs = [self.in_proj[i](feats[i]) for i in self.valid_indices]
         masks = [torch.zeros((x.size(0), x.size(2), x.size(
             3)), device=x.device, dtype=torch.bool) for x in srcs]
@@ -226,7 +226,7 @@ class AVSegHeadStar(nn.Module):
                                                                        level_start_index, valid_ratios, lvl_pos_embed_flatten, mask_flatten)
         # decoder
         query = query.reshape(bs//self.T, self.T, self.T, -
-                              1).permute(0, 2, 1, 3).reshape(bs, self.T, -1).mean(1)
+                              1).permute(0, 2, 1, 3).reshape(bs, self.T, -1).mean(1).unsqueeze(1)
         query = query.repeat(1, self.query_num, 1)
         if self.use_learnable_queries:
             query = query + \
@@ -239,12 +239,13 @@ class AVSegHeadStar(nn.Module):
         for i, z in enumerate(self.reform_output_squences(memory, spatial_shapes, level_start_index, 1)):
             mask_feats.append(z.transpose(1, 2).view(
                 bs, -1, spatial_shapes[i][0], spatial_shapes[i][1]))
-        cur_fpn = self.lateral_conv(feat14)
-        mask_feature = mask_feats[0]
-        mask_feature = cur_fpn + \
-            F.interpolate(
-                mask_feature, size=cur_fpn.shape[-2:], mode='bilinear', align_corners=False)
-        mask_feature = self.out_conv(mask_feature)
+        # cur_fpn = self.lateral_conv(feat14)
+        # mask_feature = mask_feats[0]
+        # mask_feature = cur_fpn + \
+        #     F.interpolate(
+        #         mask_feature, size=cur_fpn.shape[-2:], mode='bilinear', align_corners=False)
+        # mask_feature = self.out_conv(mask_feature)
+        mask_feature = self.fpn(mask_feats)
         if hasattr(self, 'fusion_block'):
             mask_feature = self.fusion_block(mask_feature, audio_feat)
 

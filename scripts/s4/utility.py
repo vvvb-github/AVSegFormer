@@ -171,3 +171,18 @@ def save_raw_img_mask(anno_file_path, raw_img_base_path, mask_base_path, split='
             cv2.imwrite(os.path.join(save_img_path, img_name), raw_img_mask)
         count += 1
     print(f'count: {count} videos')
+
+
+def prepare_targets(mask):
+    '''
+    mask: (bs//T, H, W)
+    '''
+    targets = []
+    for m in mask:
+        tgt = {'gt_masks': m, 'gt_classes': torch.ones(
+            [1, 1], dtype=m.dtype, device=m.device), 'vid_mask_flag': True}
+        targets.append(tgt)
+        for i in range(4):
+            targets.append(
+                {'gt_masks': None, 'gt_classes': None, 'vid_mask_flag': False})
+    return targets
