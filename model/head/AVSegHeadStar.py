@@ -40,9 +40,10 @@ class MLP(nn.Module):
 
 
 class SimpleFPN(nn.Module):
-    def __init__(self, channel=256, num_layer=3):
+    def __init__(self, channel=256, num_layer=3, scale_factor=1):
         super().__init__()
         self.num_layer = num_layer
+        self.scale_factor = scale_factor
         self.layers = nn.ModuleList(
             [nn.Sequential(
                 Interpolate(scale_factor=2, mode='bilinear'),
@@ -63,6 +64,9 @@ class SimpleFPN(nn.Module):
         for i in range(self.num_layer-1):
             cur = self.layers[i](cur)
             cur = cur + rx[i+1]
+        if self.scale_factor > 1:
+            cur = F.interpolate(cur, scale_factor=self.scale_factor,
+                                mode='bilinear', align_corners=False)
         cur = self.out_layer(cur)
 
         return cur
@@ -78,7 +82,7 @@ class AVSegHeadStar(nn.Module):
                  matcher,
                  aux_output=False,
                  embed_dim=256,
-                 valid_indices=[0, 1, 2, 3],
+                 valid_indices=[1, 2, 3],
                  scale_factor=4,
                  positional_encoding=None,
                  use_learnable_queries=True,
@@ -132,7 +136,7 @@ class AVSegHeadStar(nn.Module):
         #     nn.ReLU(True)
         # )
 
-        self.fpn = SimpleFPN(num_layer=len(valid_indices))
+        self.fpn = SimpleFPN(num_layer=len(valid_indices), scale_factor=2)
         self.logits_predictor = nn.Sequential(
             nn.Linear(embed_dim, 128),
             nn.Linear(128, 1)
@@ -218,21 +222,19 @@ class AVSegHeadStar(nn.Module):
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
 
         # encoder
-        query = audio_feat.repeat(1, self.T, 1).reshape(
-            bs//self.T, self.T, self.T, -1)
-        query = query.permute(0, 2, 1, 3).reshape(bs, self.T, -1)
-
-        query, memory, reference_points = self.transformer.forward_enc(query, src_flatten, spatial_shapes,
-                                                                       level_start_index, valid_ratios, lvl_pos_embed_flatten, mask_flatten)
+        # query = audio_feat.repeat(1, self.T, 1).reshape(
+        #     bs//self.T, self.T, self.T, -1)
+        # query = query.permute(0, 2, 1, 3).reshape(bs, self.T, -1)
+        query, memory = self.transformer.forward_enc(audio_feat, src_flatten)
         # decoder
-        query = query.reshape(bs//self.T, self.T, self.T, -
-                              1).permute(0, 2, 1, 3).reshape(bs, self.T, -1).mean(1).unsqueeze(1)
-        query = query.repeat(1, self.query_num, 1)
+        # query = query.reshape(bs//self.T, self.T, self.T, -
+        #                       1).permute(0, 2, 1, 3).reshape(bs, self.T, -1).mean(1).unsqueeze(1)
+        # query = query.repeat(1, self.query_num, 1)
         if self.use_learnable_queries:
             query = query + \
                 self.learnable_query.weight[None, :, :].repeat(bs, 1, 1)
         outputs = self.transformer.forward_dec(
-            query, memory, reference_points, spatial_shapes, level_start_index, mask_flatten)
+            query, memory, None, spatial_shapes, level_start_index, mask_flatten)
 
         # generate mask feature
         mask_feats = []

@@ -83,4 +83,4 @@ loss = dict(
 process = dict(
     num_works=8,
     train_epochs=60,
-    freeze_epochs=10)
+    freeze_epochs=0)

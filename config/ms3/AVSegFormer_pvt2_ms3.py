@@ -16,7 +16,7 @@ model = dict(
         num_classes=1,
         query_num=300,
         use_learnable_queries=True,
-        aux_output=True,
+        # aux_output=True,
         fusion_block=dict(type='CrossModalMixer'),
         matcher=dict(
             type='HungarianMatcher',
@@ -83,4 +83,4 @@ loss = dict(
 process = dict(
     num_works=8,
     train_epochs=60,
-    freeze_epochs=10)
+    freeze_epochs=0)
