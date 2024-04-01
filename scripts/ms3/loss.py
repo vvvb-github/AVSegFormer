@@ -1,12 +1,12 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision.ops.focal_loss import sigmoid_focal_loss
 
 
-def l1_loss(pred_logit):
-    l1 = nn.L1Loss()
-    pred_logit = pred_logit.sigmoid()
-    loss = l1(pred_logit, torch.ones_like(pred_logit))
+def cls_loss(pred_logit):
+    l = nn.CrossEntropyLoss()
+    loss = l(pred_logit, torch.ones_like(pred_logit))
     return loss
 
 
@@ -30,6 +30,11 @@ def dice_loss(pred_mask, five_gt_masks):
     return loss.mean()
 
 
+def focal_loss(pred_mask, five_gt_masks):
+    assert len(pred_mask.shape) == 4
+    return sigmoid_focal_loss(pred_mask, five_gt_masks, reduction='mean')
+
+
 def mix_loss(mask_feature, gt_mask):
     mask_feature = torch.mean(mask_feature, dim=1, keepdim=True)
     mask_feature = F.interpolate(
@@ -46,8 +51,12 @@ def AVSLoss(pred_mask, pred_logit, mask_feature, aux_outputs, gt_mask, loss_type
             loss = w*dice_loss(pred_mask, gt_mask)
             total_loss += loss
             print_loss_dict['dice_loss'] = loss.item()
+        elif l == 'focal':
+            loss = w*focal_loss(pred_mask, gt_mask)
+            total_loss += loss
+            print_loss_dict['focal_loss'] = loss.item()
         elif l == 'l1':
-            loss = w*l1_loss(pred_logit)
+            loss = w*cls_loss(pred_logit)
             total_loss += loss
             print_loss_dict['l1_loss'] = loss.item()
         elif l == 'mix':
@@ -62,8 +71,12 @@ def AVSLoss(pred_mask, pred_logit, mask_feature, aux_outputs, gt_mask, loss_type
                     loss = w*dice_loss(mask, gt_mask)
                     total_loss += loss
                     print_loss_dict[f'dice_loss{i}'] = loss.item()
+                elif l == 'focal':
+                    loss = w*focal_loss(mask, gt_mask)
+                    total_loss += loss
+                    print_loss_dict[f'focal_loss{i}'] = loss.item()
                 elif l == 'l1':
-                    loss = w*l1_loss(logit)
+                    loss = w*cls_loss(logit)
                     total_loss += loss
                     print_loss_dict[f'l1_loss{i}'] = loss.item()
 

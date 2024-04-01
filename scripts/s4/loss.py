@@ -3,16 +3,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def l1_loss(pred_logit):
-    l1 = nn.L1Loss()
-    pred_logit = pred_logit.sigmoid()
+def l_loss(pred_logit):
+    l = nn.CrossEntropyLoss()
 
     indices = torch.tensor(list(range(0, len(pred_logit), 5)))
     indices = indices.cuda()
     first_pred = torch.index_select(
         pred_logit, dim=0, index=indices)  # [bs//5, 1, 1]
 
-    loss = l1(first_pred, torch.ones_like(first_pred))
+    loss = l(first_pred, torch.ones_like(first_pred))
     return loss
 
 
@@ -58,7 +57,7 @@ def AVSLoss(pred_mask, pred_logit, mask_feature, aux_outputs, gt_mask, loss_type
             total_loss += loss
             print_loss_dict['dice_loss'] = loss.item()
         elif l == 'l1':
-            loss = w*l1_loss(pred_logit)
+            loss = w*l_loss(pred_logit)
             total_loss += loss
             print_loss_dict['l1_loss'] = loss.item()
         elif l == 'mix':
@@ -74,7 +73,7 @@ def AVSLoss(pred_mask, pred_logit, mask_feature, aux_outputs, gt_mask, loss_type
                     total_loss += loss
                     print_loss_dict[f'dice_loss{i}'] = loss.item()
                 elif l == 'l1':
-                    loss = w*l1_loss(logit)
+                    loss = w*l_loss(logit)
                     total_loss += loss
                     print_loss_dict[f'l1_loss{i}'] = loss.item()
 

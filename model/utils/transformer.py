@@ -201,10 +201,11 @@ class AVStarTransformerEncoder(nn.Module):
 
     def forward(self, src_a, src_v):
         src = torch.cat([src_v, src_a], dim=1)
+        outputs = []
         for layer in self.layers:
             src = layer(src)
-        src_v, src_a = src[:, :-1, :], src[:, -1:, :]
-        return src_a, src_v
+            outputs.append(src.clone())
+        return outputs
 
 
 class AVStarTransformer(nn.Module):

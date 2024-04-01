@@ -72,6 +72,33 @@ class SimpleFPN(nn.Module):
         return cur
 
 
+class EncodedBlockGate(nn.Module):
+    def __init__(self, num_blocks, channel=256) -> None:
+        super().__init__()
+        self.num_blocks = num_blocks
+        self.conv_layers = nn.ModuleList([
+            nn.Conv2d(2*channel, channel, kernel_size=3, stride=1, padding=1)
+            for i in range(self.num_blocks-1)
+        ])
+        self.out_conv = nn.Conv2d(
+            channel, channel, kernel_size=3, stride=1, padding=1)
+
+    def forward(self, feature_lists):
+        assert len(feature_lists) == self.num_blocks
+        final_feature = None
+        for i in range(1, self.num_blocks):
+            f1, f2 = feature_lists[i-1], feature_lists[i]
+            f = torch.cat([f1, f2], dim=1)
+            f = self.conv_layers[i-1](f)
+            f = f.sigmoid().mean(-1).mean(-1)
+            f = torch.einsum('bchw,bc->bchw', f2, f)
+            if final_feature is None:
+                final_feature = f.clone()
+            else:
+                final_feature = final_feature+f
+        return self.out_conv(final_feature)
+
+
 class AVSegHeadStar(nn.Module):
     def __init__(self,
                  T,
@@ -124,23 +151,27 @@ class AVSegHeadStar(nn.Module):
         if fusion_block is not None:
             self.fusion_block = build_fusion_block(**fusion_block)
 
-        # self.lateral_conv = nn.Sequential(
-        #     nn.Conv2d(embed_dim, embed_dim,
-        #               kernel_size=1, stride=1, padding=0),
-        #     nn.GroupNorm(32, embed_dim)
-        # )
-        # self.out_conv = nn.Sequential(
-        #     nn.Conv2d(embed_dim, embed_dim,
-        #               kernel_size=3, stride=1, padding=1),
-        #     nn.GroupNorm(32, embed_dim),
-        #     nn.ReLU(True)
-        # )
+        self.lateral_conv = nn.Sequential(
+            nn.Conv2d(embed_dim, embed_dim,
+                      kernel_size=1, stride=1, padding=0),
+            nn.GroupNorm(32, embed_dim)
+        )
+        self.out_conv = nn.Sequential(
+            nn.Conv2d(embed_dim, embed_dim,
+                      kernel_size=3, stride=1, padding=1),
+            nn.GroupNorm(32, embed_dim),
+            nn.ReLU(True)
+        )
 
-        self.fpn = SimpleFPN(num_layer=len(valid_indices), scale_factor=2)
+        # self.fpn = SimpleFPN(num_layer=len(valid_indices), scale_factor=2)
         self.logits_predictor = nn.Sequential(
             nn.Linear(embed_dim, 128),
-            nn.Linear(128, 1)
+            nn.Linear(128, num_classes)
         )
+
+        self.gates = nn.ModuleList([
+            EncodedBlockGate(self.transformer.encoder.num_layers) for i in range(self.num_feats)
+        ])
 
         self._reset_parameters()
 
@@ -189,7 +220,7 @@ class AVSegHeadStar(nn.Module):
             train (bool)
         """
         bs = audio_feat.shape[0]
-        # feat14 = self.in_proj[0](feats[0])
+        feat14 = self.in_proj[0](feats[0])
         srcs = [self.in_proj[i](feats[i]) for i in self.valid_indices]
         masks = [torch.zeros((x.size(0), x.size(2), x.size(
             3)), device=x.device, dtype=torch.bool) for x in srcs]
@@ -219,37 +250,47 @@ class AVSegHeadStar(nn.Module):
             spatial_shapes, dtype=torch.long, device=src_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros(
             (1, )), spatial_shapes.prod(1).cumsum(0)[:-1]))
-        valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
 
         # encoder
-        # query = audio_feat.repeat(1, self.T, 1).reshape(
-        #     bs//self.T, self.T, self.T, -1)
-        # query = query.permute(0, 2, 1, 3).reshape(bs, self.T, -1)
-        query, memory = self.transformer.forward_enc(audio_feat, src_flatten)
-        # decoder
-        # query = query.reshape(bs//self.T, self.T, self.T, -
-        #                       1).permute(0, 2, 1, 3).reshape(bs, self.T, -1).mean(1).unsqueeze(1)
-        # query = query.repeat(1, self.query_num, 1)
+        outputs = self.transformer.forward_enc(audio_feat, src_flatten)
+        final_src = outputs[-1]
+        src_v, src_a = final_src[:, :-1, :], final_src[:, -1:, :]
+        # audio queries
+        query = src_a.repeat(1, self.query_num, 1)
         if self.use_learnable_queries:
             query = query + \
                 self.learnable_query.weight[None, :, :].repeat(bs, 1, 1)
+        # block gate
+        feature_lists = []
+        for src in outputs:
+            m = src[:, :-1, :]
+            feature_lists.append([])
+            for i, z in enumerate(self.reform_output_squences(m, spatial_shapes, level_start_index, 1)):
+                feature_lists[-1].append(z.transpose(1, 2).view(bs, -1,
+                                         spatial_shapes[i][0], spatial_shapes[i][1]))
+        feature_lists = list(map(list, zip(*feature_lists)))
+        gated_memory = []
+        for i, fl in enumerate(feature_lists):
+            gated_feature = self.gates[i](fl)
+            gated_memory.append(gated_feature.flatten(2).transpose(1, 2))
+        gated_memory = torch.cat(gated_memory, 1)
+        # decoder
         outputs = self.transformer.forward_dec(
-            query, memory, None, spatial_shapes, level_start_index, mask_flatten)
+            query, gated_memory, None, spatial_shapes, level_start_index, mask_flatten)
 
         # generate mask feature
         mask_feats = []
-        for i, z in enumerate(self.reform_output_squences(memory, spatial_shapes, level_start_index, 1)):
+        for i, z in enumerate(self.reform_output_squences(src_v, spatial_shapes, level_start_index, 1)):
             mask_feats.append(z.transpose(1, 2).view(
                 bs, -1, spatial_shapes[i][0], spatial_shapes[i][1]))
-        # cur_fpn = self.lateral_conv(feat14)
-        # mask_feature = mask_feats[0]
-        # mask_feature = cur_fpn + \
-        #     F.interpolate(
-        #         mask_feature, size=cur_fpn.shape[-2:], mode='bilinear', align_corners=False)
-        # mask_feature = self.out_conv(mask_feature)
-        mask_feature = self.fpn(mask_feats)
+        cur_fpn = self.lateral_conv(feat14)
+        mask_feature = mask_feats[0]
+        mask_feature = cur_fpn + \
+            F.interpolate(
+                mask_feature, size=cur_fpn.shape[-2:], mode='bilinear', align_corners=False)
+        mask_feature = self.out_conv(mask_feature)
         if hasattr(self, 'fusion_block'):
-            mask_feature = self.fusion_block(mask_feature, audio_feat)
+            mask_feature = self.fusion_block(mask_feature, src_a)
 
         # predict output mask
         pred_masks = torch.einsum(
@@ -325,9 +366,9 @@ class AVSegHeadStar(nn.Module):
         return outputs
 
     def pad_pred_masks(self, pred_mask, pred_logit, indice, target):
-        matched_masks = pred_mask[indice[0], :, :]  # (n_cls, h, w)
-        matched_logits = pred_logit[indice[0], :]  # (n_cls, n_cls)
-        gt_logits = target['gt_classes'][indice[1], :]  # (n_cls, n_cls)
+        matched_masks = pred_mask[indice[0], :, :]  # (n_gts, h, w)
+        matched_logits = pred_logit[indice[0], :]  # (n_gts, n_cls)
+        gt_logits = target['gt_classes'][indice[1], :]  # (n_gts, n_cls)
         matched_cls = torch.argmax(gt_logits, dim=1)
         pad_mask = torch.zeros_like(pred_mask[0]).unsqueeze(
             0).repeat(self.num_classes, 1, 1)

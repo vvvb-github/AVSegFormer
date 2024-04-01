@@ -14,9 +14,9 @@ model = dict(
         type='AVSegHead',
         in_channels=[64, 128, 320, 512],
         num_classes=1,
-        query_num=300,
+        query_num=100,
         use_learnable_queries=True,
-        # aux_output=True,
+        aux_output=True,
         fusion_block=dict(type='CrossModalMixer'),
         matcher=dict(
             type='HungarianMatcher',
