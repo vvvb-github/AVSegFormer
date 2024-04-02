@@ -162,9 +162,20 @@ def get_optimizer(model, cfg):
         opt = torch.optim.Adam(model.parameters(), cfg.lr)
     elif cfg.type == 'AdamW':
         opt = torch.optim.AdamW(model.parameters(), cfg.lr)
-    elif cfg.type=='SGD':
-        opt=torch.optim.SGD(model.parameters(), cfg.lr)
+    elif cfg.type == 'SGD':
+        opt = torch.optim.SGD(model.parameters(), cfg.lr)
     else:
         raise ValueError
 
-    return opt
+    if cfg.scheduler.type == 'Step':
+        sch_param = cfg.scheduler
+        sch_param.pop('type')
+        sch = torch.optim.lr_scheduler.StepLR(opt, **sch_param)
+    elif cfg.scheduler.type == 'MultiStep':
+        sch_param = cfg.scheduler
+        sch_param.pop('type')
+        sch = torch.optim.lr_scheduler.MultiStepLR(opt, **sch_param)
+    else:
+        raise ValueError
+
+    return opt, sch

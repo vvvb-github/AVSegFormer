@@ -63,7 +63,7 @@ def main():
                                                  pin_memory=True)
 
     # optimizer
-    optimizer = pyutils.get_optimizer(model, cfg.optimizer)
+    optimizer, scheduler = pyutils.get_optimizer(model, cfg.optimizer)
     loss_util = LossUtil(**cfg.loss)
     avg_meter_miou = pyutils.AverageMeter('miou')
 
@@ -98,6 +98,7 @@ def main():
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            scheduler.step()
 
             global_step += 1
             if (global_step - 1) % 20 == 0:

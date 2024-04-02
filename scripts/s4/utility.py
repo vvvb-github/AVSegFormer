@@ -179,7 +179,7 @@ def prepare_targets(mask):
     '''
     targets = []
     for m in mask:
-        tgt = {'gt_masks': m, 'gt_classes': torch.ones(
+        tgt = {'gt_masks': m.unsqueeze(0), 'gt_classes': torch.ones(
             [1, 1], dtype=m.dtype, device=m.device), 'vid_mask_flag': True}
         targets.append(tgt)
         for i in range(4):

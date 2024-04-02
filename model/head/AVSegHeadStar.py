@@ -40,36 +40,32 @@ class MLP(nn.Module):
 
 
 class SimpleFPN(nn.Module):
-    def __init__(self, channel=256, num_layer=3, scale_factor=1):
+    def __init__(self, channel=256, layers=3):
         super().__init__()
-        self.num_layer = num_layer
-        self.scale_factor = scale_factor
-        self.layers = nn.ModuleList(
-            [nn.Sequential(
-                Interpolate(scale_factor=2, mode='bilinear'),
-                nn.Conv2d(channel, channel, kernel_size=3, stride=1, padding=1)
-            ) for i in range(num_layer-1)]
+
+        assert layers == 3  # only designed for 3 layers
+        self.up1 = nn.Sequential(
+            Interpolate(scale_factor=2, mode='bilinear'),
+            nn.Conv2d(channel, channel, kernel_size=3, stride=1, padding=1)
         )
-        self.out_layer = nn.Sequential(
-            nn.Conv2d(channel, channel, kernel_size=3, stride=1, padding=1),
-            nn.GroupNorm(32, channel),
-            nn.ReLU(True)
+        self.up2 = nn.Sequential(
+            Interpolate(scale_factor=2, mode='bilinear'),
+            nn.Conv2d(channel, channel, kernel_size=3, stride=1, padding=1)
+        )
+        self.up3 = nn.Sequential(
+            Interpolate(scale_factor=2, mode='bilinear'),
+            nn.Conv2d(channel, channel, kernel_size=3, stride=1, padding=1)
         )
 
     def forward(self, x):
-        assert len(x) == self.num_layer
+        x1 = self.up1(x[-1])
+        x1 = x1 + x[-2]
 
-        rx = list(reversed(x))
-        cur = rx[0]
-        for i in range(self.num_layer-1):
-            cur = self.layers[i](cur)
-            cur = cur + rx[i+1]
-        if self.scale_factor > 1:
-            cur = F.interpolate(cur, scale_factor=self.scale_factor,
-                                mode='bilinear', align_corners=False)
-        cur = self.out_layer(cur)
+        x2 = self.up2(x1)
+        x2 = x2 + x[-3]
 
-        return cur
+        y = self.up3(x2)
+        return y
 
 
 class EncodedBlockGate(nn.Module):
@@ -163,7 +159,7 @@ class AVSegHeadStar(nn.Module):
             nn.ReLU(True)
         )
 
-        # self.fpn = SimpleFPN(num_layer=len(valid_indices), scale_factor=2)
+        self.fpn = SimpleFPN()
         self.logits_predictor = nn.Sequential(
             nn.Linear(embed_dim, 128),
             nn.Linear(128, num_classes)
@@ -284,10 +280,8 @@ class AVSegHeadStar(nn.Module):
             mask_feats.append(z.transpose(1, 2).view(
                 bs, -1, spatial_shapes[i][0], spatial_shapes[i][1]))
         cur_fpn = self.lateral_conv(feat14)
-        mask_feature = mask_feats[0]
-        mask_feature = cur_fpn + \
-            F.interpolate(
-                mask_feature, size=cur_fpn.shape[-2:], mode='bilinear', align_corners=False)
+        mask_feature = self.fpn(mask_feats)
+        mask_feature = cur_fpn + mask_feature
         mask_feature = self.out_conv(mask_feature)
         if hasattr(self, 'fusion_block'):
             mask_feature = self.fusion_block(mask_feature, src_a)
