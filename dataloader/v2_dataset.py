@@ -145,6 +145,7 @@ class V2Dataset(Dataset):
         print("{}/{} videos are used for {}.".format(len(self.df_split),
               len(df_all), self.split))
         self.img_transform = transforms.Compose([
+            transforms.Resize(cfg.img_size),
             transforms.ToTensor(),
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
         ])
