@@ -8,11 +8,6 @@
 **************************************************************************************************
 */
 
-/*!
-* Copyright (c) Facebook, Inc. and its affiliates.
-* Modified by Bowen Cheng from https://github.com/fundamentalvision/Deformable-DETR
-*/
-
 #include "ms_deform_attn.h"
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {

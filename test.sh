@@ -6,4 +6,4 @@ PYTHONPATH="$(dirname $0)/..":$PYTHONPATH \
 python scripts/$SESSION/test.py \
         $CONFIG \
         $WEIGHTS \
-        # --save_pred_mask
+        --save_pred_mask

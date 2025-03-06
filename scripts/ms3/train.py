@@ -6,8 +6,10 @@ import random
 import numpy as np
 from mmcv import Config
 import argparse
+import warnings
 from utils import pyutils
 from utils.loss_util import LossUtil
+from mmcv.runner import get_dist_info, init_dist
 from utility import mask_iou
 from utils.logger import getLogger
 from model import build_model
@@ -36,8 +38,29 @@ def main():
 
     # config
     cfg = Config.fromfile(args.cfg)
+    # set cudnn_benchmark
+    if cfg.get('cudnn_benchmark', False):
+        torch.backends.cudnn.benchmark = True
     logger.info(cfg.pretty_text)
     checkpoint_dir = os.path.join(args.checkpoint_dir, dir_name)
+    
+    # distributed
+    if args.gpu_ids is not None:
+        cfg.gpu_ids = args.gpu_ids
+    else:
+        cfg.gpu_ids = range(1) if args.gpus is None else range(args.gpus)
+    if args.launcher == 'none':
+        if len(cfg.gpu_ids) > 1:
+            warnings.warn(
+                f'We treat {cfg.gpu_ids} as gpu-ids, and reset to '
+                f'{cfg.gpu_ids[0:1]} as gpu-ids to avoid potential error in '
+                'non-distribute training time.')
+            cfg.gpu_ids = cfg.gpu_ids[0:1]
+    else:
+        init_dist(args.launcher, backend='nccl')
+        # re-set gpu_ids with distributed training mode
+        _, world_size = get_dist_info()
+        cfg.gpu_ids = range(world_size)
 
     # model
     model = build_model(**cfg.model)
@@ -153,6 +176,23 @@ if __name__ == '__main__':
                         default='work_dir', help='dir to save checkpoints')
     parser.add_argument("--session_name", default="MS3",
                         type=str, help="the MS3 setting")
+    group_gpus = parser.add_mutually_exclusive_group()
+    group_gpus.add_argument('--gpus',
+                            type=int,
+                            help='number of gpus to use '
+                            '(only applicable to non-distributed training)')
+    group_gpus.add_argument('--gpu-ids',
+                            type=int,
+                            nargs='+',
+                            help='ids of gpus to use '
+                            '(only applicable to non-distributed training)')
+    parser.add_argument('--launcher',
+                        choices=['none', 'pytorch', 'slurm', 'mpi'],
+                        default='none',
+                        help='job launcher')
+    parser.add_argument('--local_rank', type=int, default=0)
 
     args = parser.parse_args()
+    if 'LOCAL_RANK' not in os.environ:
+        os.environ['LOCAL_RANK'] = str(args.local_rank)
     main()

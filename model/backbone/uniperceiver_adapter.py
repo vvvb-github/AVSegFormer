@@ -92,8 +92,6 @@ class UniPerceiverAdapter(MultiModelBertEncoder):
 
         # Patch Embedding forward
         x, H, W = self.visual_embed(x)
-        q = self.token_embed(q)
-
         bs, n, dim = x.shape
 
         # Interaction

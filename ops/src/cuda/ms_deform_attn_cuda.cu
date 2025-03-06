@@ -8,11 +8,6 @@
 **************************************************************************************************
 */
 
-/*!
-* Copyright (c) Facebook, Inc. and its affiliates.
-* Modified by Bowen Cheng from https://github.com/fundamentalvision/Deformable-DETR
-*/
-
 #include <vector>
 #include "cuda/ms_deform_im2col_cuda.cuh"
 
@@ -23,7 +18,7 @@
 
 
 at::Tensor ms_deform_attn_cuda_forward(
-    const at::Tensor &value, 
+    const at::Tensor &value,
     const at::Tensor &spatial_shapes,
     const at::Tensor &level_start_index,
     const at::Tensor &sampling_loc,
@@ -45,9 +40,9 @@ at::Tensor ms_deform_attn_cuda_forward(
     const int batch = value.size(0);
     const int spatial_size = value.size(1);
     const int num_heads = value.size(2);
-    const int channels = value.size(3);
+    const int channels = value.size(3); // batch, spatial_size, num_heads, channels = value.shape
 
-    const int num_levels = spatial_shapes.size(0);
+    const int num_levels = spatial_shapes.size(0); // [num_levels, 2]
 
     const int num_query = sampling_loc.size(1);
     const int num_point = sampling_loc.size(4);
@@ -55,8 +50,8 @@ at::Tensor ms_deform_attn_cuda_forward(
     const int im2col_step_ = std::min(batch, im2col_step);
 
     AT_ASSERTM(batch % im2col_step_ == 0, "batch(%d) must divide im2col_step(%d)", batch, im2col_step_);
-    
-    auto output = at::zeros({batch, num_query, num_heads, channels}, value.options());
+
+    auto output = at::zeros({batch, num_query, num_heads, channels}, value.options()); // 初始化一个output
 
     const int batch_n = im2col_step_;
     auto output_n = output.view({batch/im2col_step_, batch_n, num_query, num_heads, channels});
@@ -86,7 +81,7 @@ at::Tensor ms_deform_attn_cuda_forward(
 
 
 std::vector<at::Tensor> ms_deform_attn_cuda_backward(
-    const at::Tensor &value, 
+    const at::Tensor &value,
     const at::Tensor &spatial_shapes,
     const at::Tensor &level_start_index,
     const at::Tensor &sampling_loc,
@@ -112,7 +107,7 @@ std::vector<at::Tensor> ms_deform_attn_cuda_backward(
     const int batch = value.size(0);
     const int spatial_size = value.size(1);
     const int num_heads = value.size(2);
-    const int channels = value.size(3);
+    const int channels = value.size(3); // batch, spatial_size, num_heads, channels = value.shape
 
     const int num_levels = spatial_shapes.size(0);
 
@@ -123,17 +118,17 @@ std::vector<at::Tensor> ms_deform_attn_cuda_backward(
 
     AT_ASSERTM(batch % im2col_step_ == 0, "batch(%d) must divide im2col_step(%d)", batch, im2col_step_);
 
-    auto grad_value = at::zeros_like(value);
-    auto grad_sampling_loc = at::zeros_like(sampling_loc);
-    auto grad_attn_weight = at::zeros_like(attn_weight);
+    auto grad_value = at::zeros_like(value); // value的梯度
+    auto grad_sampling_loc = at::zeros_like(sampling_loc); // sampling loc的梯度
+    auto grad_attn_weight = at::zeros_like(attn_weight); // attn weight的梯度
 
     const int batch_n = im2col_step_;
-    auto per_value_size = spatial_size * num_heads * channels;
-    auto per_sample_loc_size = num_query * num_heads * num_levels * num_point * 2;
-    auto per_attn_weight_size = num_query * num_heads * num_levels * num_point;
+    auto per_value_size = spatial_size * num_heads * channels; // 每个value的大小
+    auto per_sample_loc_size = num_query * num_heads * num_levels * num_point * 2; //每个sample loc的大小
+    auto per_attn_weight_size = num_query * num_heads * num_levels * num_point; // 每个attn weight的大小
     auto grad_output_n = grad_output.view({batch/im2col_step_, batch_n, num_query, num_heads, channels});
-    
-    for (int n = 0; n < batch/im2col_step_; ++n)
+
+    for (int n = 0; n < batch/im2col_step_; ++n) // col2im
     {
         auto grad_output_g = grad_output_n.select(0, n);
         AT_DISPATCH_FLOATING_TYPES(value.type(), "ms_deform_attn_backward_cuda", ([&] {

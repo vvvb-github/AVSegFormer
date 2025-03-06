@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from .backbone import build_backbone
 from .neck import build_neck
 from .head import build_head
@@ -13,7 +14,7 @@ class UnifiedModel(nn.Module):
                  head,
                  neck=None,
                  audio_dim=128,
-                 embed_dim=256,
+                 embed_dim=768,
                  T=5,
                  freeze_audio_backbone=True,
                  *args, **kwargs):
@@ -26,6 +27,7 @@ class UnifiedModel(nn.Module):
         self.vggish = VGGish(**vggish)
         self.head = build_head(**head)
         self.audio_proj = nn.Linear(audio_dim, embed_dim)
+        self.query_proj = nn.Linear(embed_dim, 256)
 
         if self.freeze_audio_backbone:
             for p in self.vggish.parameters():
@@ -55,11 +57,12 @@ class UnifiedModel(nn.Module):
 
             return out
 
-    def extract_feat(self, x):
-        feats = self.backbone(x)
+    def extract_feat(self, x, q):
+        feats, query = self.backbone(x, q)
         if self.neck is not None:
             feats = self.neck(feats)
-        return feats
+        query = self.query_proj(query)
+        return feats, query
 
     def forward(self, audio, frames, vid_temporal_mask_flag=None):
         if vid_temporal_mask_flag is not None:
@@ -69,13 +72,15 @@ class UnifiedModel(nn.Module):
 
         audio_feat = audio_feat.unsqueeze(1)
         audio_feat = self.audio_proj(audio_feat)
-        img_feat, audio_feat = self.extract_feat(frames)
-        img_feat = self.neck(img_feat)
+        img_feat, audio_feat = self.extract_feat(frames, audio_feat)
         img_feat = self.mul_temporal_mask(img_feat, vid_temporal_mask_flag)
 
         pred, mask_feature = self.head(img_feat, audio_feat)
         pred = self.mul_temporal_mask(pred, vid_temporal_mask_flag)
         mask_feature = self.mul_temporal_mask(
             mask_feature, vid_temporal_mask_flag)
+        
+        pred = F.interpolate(pred, frames.shape[-2:], mode='bilinear')
+        mask_feature = F.interpolate(mask_feature, frames.shape[-2:], mode='bilinear')
 
         return pred, mask_feature

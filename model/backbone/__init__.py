@@ -8,7 +8,7 @@ def build_backbone(type, **kwargs):
         return B2_ResNet(**kwargs)
     elif type=='pvt_v2_b5':
         return pvt_v2_b5(**kwargs)
-    elif type=='uniperceiver':
+    elif type=='UniPerceiverAdapter':
         return UniPerceiverAdapter(**kwargs)
     
     
