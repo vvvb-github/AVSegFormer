@@ -52,7 +52,8 @@ def main():
                                                    batch_size=cfg.dataset.train.batch_size,
                                                    shuffle=True,
                                                    num_workers=cfg.process.num_works,
-                                                   pin_memory=True)
+                                                   pin_memory=True,
+                                                   drop_last=True)
     max_step = (len(train_dataset) // cfg.dataset.train.batch_size) * \
         cfg.process.train_epochs
     val_dataset = build_dataset(**cfg.dataset.val)
@@ -88,6 +89,15 @@ def main():
             # audio = audio.cuda()
             label = label.cuda()
             B, frame, C, H, W = imgs.shape
+            print(f"--- [AVSS] DANGER DEBUG ---")
+            print(f"1. 로컬 배치 크기 (B): {B}")
+            print(f"2. 프레임 수 (frame): {frame}")
+            print(f"3. mask_num: 10")
+            print(f"4. imgs.shape: {imgs.shape}")
+            print(f"5. label.shape (변환 전): {label.shape}") 
+            print(f"6. label 변환 시도 차원 (B * mask_num): {B * 10}")
+            print(f"7. imgs 변환 시도 차원 (B * frame): {B * frame}")
+
             imgs = imgs.view(B * frame, C, H, W)
             mask_num = 10
             label = label.view(B * mask_num, H, W)
@@ -210,3 +220,4 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     main()
+

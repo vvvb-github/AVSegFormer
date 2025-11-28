@@ -41,7 +41,8 @@ class CrossModalMixer(nn.Module):
         x = self.proj_drop(self.proj(x))
 
         x = x.sigmoid()
-        fusion_map = torch.einsum('bchw,bc->bchw', feature_map, x.squeeze())
+        x = x.view(B, C)
+        fusion_map = torch.einsum('bchw,bc->bchw', feature_map, x)
         return fusion_map
 
 

@@ -114,6 +114,7 @@ class AVSTransformerDecoderLayer(nn.Module):
         query = query + self.dropout1(out1)
         query = self.norm1(query)
         # cross attention
+
         out2 = self.cross_attn(
             query, src, src, key_padding_mask=padding_mask)[0]
         query = query + self.dropout2(out2)
