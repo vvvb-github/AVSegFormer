@@ -213,6 +213,21 @@ class AVSegHead(nn.Module):
             (1, )), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
 
+
+        if torch.distributed.is_initialized():
+            import torch.distributed as dist
+            world_size = dist.get_world_size() 
+            
+            # 4개 GPU의 src_flatten 조각을 모으기 위한 리스트 생성
+            # 참고: src_flatten의 shape[0]은 현재 10 (GPU당 Batch*T)
+            gathered_src = [torch.zeros_like(src_flatten) for _ in range(world_size)]
+            
+            # 모든 GPU의 텐서를 모아 gathered_src에 저장
+            dist.all_gather(gathered_src, src_flatten)
+            
+            # 모은 텐서 조각들을 배치 차원 (dim=0)으로 합침
+            src_flatten = torch.cat(gathered_src, dim=0) # [40, 1029, 256]이 됨
+
         # prepare queries
         bs = audio_feat.shape[0]
         query = self.query_generator(audio_feat)

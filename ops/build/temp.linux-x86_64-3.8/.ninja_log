@@ -1,0 +1,4 @@
+# ninja log v5
+0	3541	1764192014614677425	/app/AVSegFormer/ops/build/temp.linux-x86_64-3.8/app/AVSegFormer/ops/src/cpu/ms_deform_attn_cpu.o	209146016869be3b
+0	16914	1764192027978532336	/app/AVSegFormer/ops/build/temp.linux-x86_64-3.8/app/AVSegFormer/ops/src/vision.o	3bae35c735620f3c
+1	30548	1764192041590384923	/app/AVSegFormer/ops/build/temp.linux-x86_64-3.8/app/AVSegFormer/ops/src/cuda/ms_deform_attn_cuda.o	357fa73717e1c9e1

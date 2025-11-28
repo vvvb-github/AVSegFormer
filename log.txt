@@ -1,0 +1,35 @@
+"s4" "config/s4/AVSegFormer_res50_s4.py" 
+
+2025-11-27 17:53:04,572 INFO ==> Iter:    0/51780, Total_Loss:0.8652, iou_loss:0.7857, mix_loss:0.0796, lr: 0.000020
+2025-11-27 17:53:42,995 INFO ==> Iter:   50/51780, Total_Loss:0.7596, iou_loss:0.6933, mix_loss:0.0664, lr: 0.000020
+2025-11-27 17:54:21,506 INFO ==> Iter:  100/51780, Total_Loss:0.7346, iou_loss:0.6674, mix_loss:0.0672, lr: 0.000020
+2025-11-27 17:55:00,069 INFO ==> Iter:  150/51780, Total_Loss:0.5861, iou_loss:0.5203, mix_loss:0.0658, lr: 0.000020
+2025-11-27 17:55:38,788 INFO ==> Iter:  200/51780, Total_Loss:0.5316, iou_loss:0.4679, mix_loss:0.0637, lr: 0.000020
+2025-11-27 17:56:17,674 INFO ==> Iter:  250/51780, Total_Loss:0.5282, iou_loss:0.4606, mix_loss:0.0675, lr: 0.000020
+2025-11-27 17:56:56,653 INFO ==> Iter:  300/51780, Total_Loss:0.4824, iou_loss:0.4194, mix_loss:0.0631, lr: 0.000020
+2025-11-27 17:57:35,696 INFO ==> Iter:  350/51780, Total_Loss:0.4954, iou_loss:0.4324, mix_loss:0.0630, lr: 0.000020
+2025-11-27 17:58:14,832 INFO ==> Iter:  400/51780, Total_Loss:0.5057, iou_loss:0.4415, mix_loss:0.0643, lr: 0.000020
+2025-11-27 17:58:53,877 INFO ==> Iter:  450/51780, Total_Loss:0.4864, iou_loss:0.4213, mix_loss:0.0651, lr: 0.000020
+2025-11-27 17:59:33,018 INFO ==> Iter:  500/51780, Total_Loss:0.4702, iou_loss:0.4062, mix_loss:0.0640, lr: 0.000020
+2025-11-27 18:00:12,154 INFO ==> Iter:  550/51780, Total_Loss:0.4664, iou_loss:0.4053, mix_loss:0.0612, lr: 0.000020
+2025-11-27 18:00:51,351 INFO ==> Iter:  600/51780, Total_Loss:0.4994, iou_loss:0.4333, mix_loss:0.0661, lr: 0.000020
+2025-11-27 18:01:30,663 INFO ==> Iter:  650/51780, Total_Loss:0.4943, iou_loss:0.4254, mix_loss:0.0689, lr: 0.000020
+2025-11-27 18:02:10,035 INFO ==> Iter:  700/51780, Total_Loss:0.4910, iou_loss:0.4267, mix_loss:0.0644, lr: 0.000020
+2025-11-27 18:02:49,313 INFO ==> Iter:  750/51780, Total_Loss:0.4721, iou_loss:0.4056, mix_loss:0.0665, lr: 0.000020
+2025-11-27 18:03:28,616 INFO ==> Iter:  800/51780, Total_Loss:0.4631, iou_loss:0.3983, mix_loss:0.0648, lr: 0.000020
+2025-11-27 18:04:07,832 INFO ==> Iter:  850/51780, Total_Loss:0.5146, iou_loss:0.4500, mix_loss:0.0646, lr: 0.000020
+2025-11-27 18:04:47,041 INFO ==> Iter:  900/51780, Total_Loss:0.4596, iou_loss:0.3971, mix_loss:0.0626, lr: 0.000020
+2025-11-27 18:05:26,284 INFO ==> Iter:  950/51780, Total_Loss:0.4360, iou_loss:0.3719, mix_loss:0.0641, lr: 0.000020
+2025-11-27 18:06:05,458 INFO ==> Iter: 1000/51780, Total_Loss:0.4494, iou_loss:0.3855, mix_loss:0.0639, lr: 0.000020
+2025-11-27 18:06:44,869 INFO ==> Iter: 1050/51780, Total_Loss:0.4336, iou_loss:0.3704, mix_loss:0.0632, lr: 0.000020
+2025-11-27 18:07:24,152 INFO ==> Iter: 1100/51780, Total_Loss:0.4553, iou_loss:0.3913, mix_loss:0.0640, lr: 0.000020
+2025-11-27 18:08:03,346 INFO ==> Iter: 1150/51780, Total_Loss:0.4190, iou_loss:0.3583, mix_loss:0.0607, lr: 0.000020
+2025-11-27 18:08:42,582 INFO ==> Iter: 1200/51780, Total_Loss:0.4261, iou_loss:0.3634, mix_loss:0.0626, lr: 0.000020
+2025-11-27 18:09:21,914 INFO ==> Iter: 1250/51780, Total_Loss:0.4373, iou_loss:0.3711, mix_loss:0.0662, lr: 0.000020
+2025-11-27 18:10:01,192 INFO ==> Iter: 1300/51780, Total_Loss:0.4050, iou_loss:0.3401, mix_loss:0.0648, lr: 0.000020
+2025-11-27 18:10:40,457 INFO ==> Iter: 1350/51780, Total_Loss:0.3921, iou_loss:0.3297, mix_loss:0.0624, lr: 0.000020
+2025-11-27 18:11:19,672 INFO ==> Iter: 1400/51780, Total_Loss:0.3839, iou_loss:0.3209, mix_loss:0.0630, lr: 0.000020
+2025-11-27 18:11:59,027 INFO ==> Iter: 1450/51780, Total_Loss:0.3925, iou_loss:0.3284, mix_loss:0.0640, lr: 0.000020
+2025-11-27 18:12:38,270 INFO ==> Iter: 1500/51780, Total_Loss:0.3724, iou_loss:0.3106, mix_loss:0.0619, lr: 0.000020
+2025-11-27 18:13:17,522 INFO ==> Iter: 1550/51780, Total_Loss:0.4405, iou_loss:0.3725, mix_loss:0.0680, lr: 0.000020
+2025-11-27 18:13:56,745 INFO ==> Iter: 1600/51780, Total_Loss:0.4306, iou_loss:0.3628, mix_loss:0.0678, lr: 0.000020
